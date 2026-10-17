@@ -1,0 +1,269 @@
+{
+  "LANGS": [
+    [
+      "hindi",
+      "हिंदी"
+    ],
+    [
+      "marathi",
+      "मराठी"
+    ],
+    [
+      "tamil",
+      "தமிழ்"
+    ],
+    [
+      "telugu",
+      "తెలుగు"
+    ],
+    [
+      "bengali",
+      "বাংলা"
+    ],
+    [
+      "kannada",
+      "ಕನ್ನಡ"
+    ],
+    [
+      "english",
+      "English"
+    ]
+  ],
+  "INTENT_MODES": [
+    {
+      "id": "business",
+      "icon": "📋",
+      "title": "Business requirements (BRD)",
+      "desc": "Owners and teams describe the software or process they need. Vaani interviews them and writes the BRD."
+    },
+    {
+      "id": "awareness",
+      "icon": "📢",
+      "title": "Public awareness",
+      "desc": "Speeches, health advisories, government circulars for mass communication"
+    },
+    {
+      "id": "audit",
+      "icon": "🔍",
+      "title": "Field audit",
+      "desc": "On-site inspections, defect logging, maintenance dispatch reports"
+    },
+    {
+      "id": "deals",
+      "icon": "🤝",
+      "title": "B2B deals",
+      "desc": "Vendor negotiations, order terms, payment milestones, quality clauses"
+    }
+  ],
+  "MARKET": {
+    "business": [
+      60,
+      120,
+      0,
+      0,
+      210,
+      180,
+      0,
+      90,
+      0,
+      0,
+      160,
+      140
+    ],
+    "awareness": [
+      30,
+      45,
+      80,
+      120,
+      200,
+      350,
+      300,
+      250,
+      180,
+      100,
+      60,
+      40
+    ],
+    "audit": [
+      0,
+      0,
+      150,
+      0,
+      300,
+      0,
+      0,
+      200,
+      0,
+      0,
+      400,
+      0
+    ],
+    "deals": [
+      100,
+      0,
+      200,
+      0,
+      0,
+      350,
+      0,
+      0,
+      250,
+      0,
+      150,
+      0
+    ]
+  },
+  "MODE_DOMAIN": {
+    "business": "Business operations",
+    "awareness": "Public health advisory",
+    "audit": "Infrastructure inspection",
+    "deals": "Textile procurement"
+  },
+  "FALLBACK_RULES": {
+    "business": {
+      "rules": [
+        {
+          "id": "r1",
+          "title": "Currency-grade hold",
+          "condition": "dollar spikes AND iron grade = B",
+          "action": "pause purchases for 72 hours",
+          "exception": "confirmed_orders > 0",
+          "confidence": "HIGH",
+          "type": "procurement"
+        },
+        {
+          "id": "r2",
+          "title": "Yield floor stop",
+          "condition": "scrap_yield < 70%",
+          "action": "halt purchasing immediately",
+          "exception": null,
+          "confidence": "HIGH",
+          "type": "quality"
+        },
+        {
+          "id": "r3",
+          "title": "Monsoon advance order",
+          "condition": "during monsoon",
+          "action": "advance all orders by 15 days",
+          "exception": null,
+          "confidence": "MEDIUM",
+          "type": "timing"
+        }
+      ],
+      "review_notes": [
+        "Define the dollar-spike threshold before automating purchases."
+      ]
+    },
+    "awareness": {
+      "rules": [
+        {
+          "id": "d1",
+          "title": "Boil water mandate",
+          "condition": "river drinking water during the next 7 days",
+          "action": "boil before drinking",
+          "exception": null,
+          "confidence": "HIGH",
+          "type": "water safety"
+        },
+        {
+          "id": "d2",
+          "title": "Vector control — weekly drain",
+          "condition": "every Sunday",
+          "action": "clear stagnant water in coolers, planters, and open containers",
+          "exception": null,
+          "confidence": "HIGH",
+          "type": "vector control"
+        },
+        {
+          "id": "d3",
+          "title": "Fever escalation protocol",
+          "condition": "body_temp > 101°F",
+          "action": "visit nearest Primary Health Center immediately",
+          "exception": null,
+          "confidence": "HIGH",
+          "type": "healthcare"
+        }
+      ],
+      "review_notes": [
+        "Demo advisory only. Issuer identity, affected area and effective date require review."
+      ]
+    },
+    "audit": {
+      "rules": [
+        {
+          "id": "a1",
+          "title": "Structural crack — immediate restriction",
+          "condition": "observed 4mm vertical crack on the northern load-bearing pillar",
+          "action": "impose 15-tonne load restriction immediately",
+          "exception": null,
+          "confidence": "HIGH",
+          "type": "critical"
+        },
+        {
+          "id": "a2",
+          "title": "Rebar exposure — corrosion risk",
+          "condition": "concrete spalling with exposed rebar observed",
+          "action": "record this structural defect in the inspection report",
+          "exception": null,
+          "confidence": "HIGH",
+          "type": "moderate"
+        },
+        {
+          "id": "a3",
+          "title": "Traffic diversion — safety measure",
+          "condition": "heavy trailers approaching the inspected bridge",
+          "action": "divert to the bypass",
+          "exception": null,
+          "confidence": "MEDIUM",
+          "type": "traffic"
+        }
+      ],
+      "review_notes": [
+        "Inspector identity, GPS and inspection time require review. No repair deadline was dictated."
+      ]
+    },
+    "deals": {
+      "rules": [
+        {
+          "id": "t1",
+          "title": "Order volume & rate lock",
+          "condition": "item = Grade-A cotton AND qty = 5000m",
+          "action": "lock rate at ₹120/meter (Total: ₹6,00,000)",
+          "exception": null,
+          "confidence": "HIGH",
+          "type": "commercial"
+        },
+        {
+          "id": "t2",
+          "title": "Three-milestone payment",
+          "condition": "order_confirmed = true",
+          "action": "pay 20% advance, 50% on dispatch, 30% within 15 days after inspection",
+          "exception": null,
+          "confidence": "HIGH",
+          "type": "payment"
+        },
+        {
+          "id": "t3",
+          "title": "Shrinkage quality penalty",
+          "condition": "shrinkage > 4%",
+          "action": "apply 10% deduction; deduction basis requires agreement",
+          "exception": null,
+          "confidence": "MEDIUM",
+          "type": "quality"
+        },
+        {
+          "id": "t4",
+          "title": "Delivery commitment",
+          "condition": "order accepted",
+          "action": "deliver by 30 October; year not specified",
+          "exception": null,
+          "confidence": "HIGH",
+          "type": "delivery"
+        }
+      ],
+      "review_notes": [
+        "Confirm buyer/seller identities, GST treatment, delivery year and the basis for the 10% deduction."
+      ]
+    }
+  }
+}

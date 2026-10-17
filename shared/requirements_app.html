@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Requirement simulator</title>
+<style>
+  :root{--bg:#0b1220;--card:#142033;--line:#23354e;--ink:#e8eef7;--mute:#9fb0c6;--cyan:#67e8f9;--ok:#34d399;--warn:#fcd34d;--bad:#f87171}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,"Nirmala UI",sans-serif;padding:18px}
+  header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;align-items:flex-end;margin-bottom:14px}
+  h1{font-size:22px;margin:0}.sub{color:var(--mute);font-size:13px}
+  .progress{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin:6px 0 16px}.progress span{display:block;height:100%;background:var(--ok);transition:width .3s}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .id{font:700 12px ui-monospace,monospace;background:var(--cyan);color:#06222a;border-radius:6px;padding:1px 7px}
+  .who{font-size:11px;font-weight:700;color:#c4b5fd;border:1px solid #4c3f8f;border-radius:99px;padding:1px 8px;margin-left:6px}
+  h2{font-size:16px;margin:8px 0 6px}.logic{font:13px/1.6 ui-monospace,monospace;background:#0d1828;border-radius:8px;padding:8px 10px;color:#cfe3f5}
+  .sim{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px}
+  .sim label{display:flex;justify-content:space-between;font-size:13px;color:var(--mute)}
+  input[type=range]{width:100%;accent-color:var(--cyan)}
+  .state{margin-top:6px;border-radius:9px;padding:8px 10px;font-weight:600;font-size:14px}
+  .fire{background:rgba(248,113,113,.15);color:var(--bad);border:1px solid rgba(248,113,113,.4)}
+  .idle{background:rgba(52,211,153,.12);color:var(--ok);border:1px solid rgba(52,211,153,.35)}
+  .check{display:flex;gap:8px;align-items:flex-start;font-size:14px;margin-top:8px}
+  .open{margin-top:16px}.open li{color:var(--warn)}
+  .empty{color:var(--mute)}
+</style>
+</head>
+<body>
+<header><div><h1 id="title"></h1><div class="sub" id="sub"></div></div><div class="sub" id="count"></div></header>
+<div class="progress"><span id="bar" style="width:0"></span></div>
+<main class="grid" id="grid"></main>
+<section class="open card" id="open" hidden><h2 id="open-title">Open questions</h2><ul id="questions"></ul></section>
+<script>
+const DATA = /*__VAANI_DATA__*/null || { title: "Requirements", rules: [], open_questions: [] };
+// Interface text; the backend sends Sarvam translations when the app language is not English.
+const L = Object.assign({
+  sub: "Interactive check of {n} approved requirements. Built directly from the BRD (no AI).",
+  tryValue: "Try a value", fires: "Rule applies", idle: "No action", defaultCheck: "Behaves as described above",
+  checksPassed: "checks completed", openQuestions: "Open questions", empty: "No approved requirements yet."
+}, DATA.labels || {});
+document.documentElement.lang = DATA.lang || "en";
+const el = (tag, attrs = {}, text) => { const n = document.createElement(tag); Object.assign(n, attrs); if (text != null) n.textContent = text; return n; };
+const tested = new Set();
+// Thresholds are read from the English rule ("stock goes below 100 kg" -> {op:"lt", value:100, unit:"kg"});
+// translated text is only displayed. Only simple single-threshold rules become simulators.
+function threshold(text) {
+  const m = /(below|under|less than|fewer than|lower than|above|over|more than|exceeds?|exceeding|greater than|higher than)\s+(?:rs\.?|₹|inr)?\s*([\d,]+(?:\.\d+)?)\s*(%|[a-z]+)?/i.exec(text || "");
+  if (!m) return null;
+  const value = Number(m[2].replace(/,/g, ""));
+  if (!isFinite(value) || value <= 0) return null;
+  return { op: /below|under|less|fewer|lower/i.test(m[1]) ? "lt" : "gt", value, unit: m[3] || "" };
+}
+function render() {
+  document.getElementById("title").textContent = DATA.title;
+  document.getElementById("sub").textContent = L.sub.replace("{n}", DATA.rules.length);
+  const grid = document.getElementById("grid");
+  if (!DATA.rules.length) grid.append(el("p", { className: "empty" }, L.empty));
+  DATA.rules.forEach(r => {
+    const show = r.display || {};
+    const card = el("article", { className: "card" });
+    const head = el("div"); head.append(el("span", { className: "id" }, r.req_id));
+    if (r.speaker) head.append(el("span", { className: "who" }, r.speaker));
+    card.append(head, el("h2", {}, show.title || r.title), el("div", { className: "logic" }, show.logic || ("IF " + r.condition + " THEN " + r.action + (r.exception ? " UNLESS " + r.exception : ""))));
+    const t = threshold(r.condition);
+    if (t) {
+      const sim = el("div", { className: "sim" });
+      const max = Math.max(1, Math.ceil(t.value * 2));
+      const label = el("label"); const shown = el("b");
+      label.append(el("span", {}, L.tryValue), shown);
+      const range = el("input", { type: "range", min: 0, max, step: max > 100 ? 1 : 0.5, value: t.op === "lt" ? Math.round(t.value * 1.4) : Math.round(t.value * 0.6) });
+      range.setAttribute("aria-label", r.title + " value");
+      const state = el("div", { className: "state" });
+      const limit = (t.op === "lt" ? "< " : "> ") + t.value.toLocaleString("en-IN") + " " + t.unit;
+      const update = () => {
+        const v = Number(range.value), fires = t.op === "lt" ? v < t.value : v > t.value;
+        shown.textContent = v.toLocaleString("en-IN") + " " + t.unit;
+        state.className = "state " + (fires ? "fire" : "idle");
+        state.textContent = fires ? L.fires + " → " + (show.action || r.action) : L.idle + " (" + limit.trim() + ")";
+      };
+      range.addEventListener("input", update); update();
+      sim.append(label, range, state); card.append(sim);
+    }
+    const checks = (r.acceptance && r.acceptance.length) ? (show.acceptance || r.acceptance) : [L.defaultCheck];
+    checks.forEach((text, i) => {
+      const key = r.req_id + ":" + i, row = el("label", { className: "check" }), box = el("input", { type: "checkbox" });
+      box.addEventListener("change", () => { box.checked ? tested.add(key) : tested.delete(key); progress(); });
+      row.append(box, el("span", {}, text)); card.append(row);
+    });
+    grid.append(card);
+  });
+  const qs = DATA.open_questions || [];
+  document.getElementById("open-title").textContent = L.openQuestions;
+  if (qs.length) { document.getElementById("open").hidden = false; qs.forEach(q => document.getElementById("questions").append(el("li", {}, q))); }
+  progress();
+}
+function progress() {
+  const total = DATA.rules.reduce((n, r) => n + Math.max(1, (r.acceptance || []).length), 0);
+  document.getElementById("bar").style.width = (total ? 100 * tested.size / total : 0) + "%";
+  document.getElementById("count").textContent = tested.size + " / " + total + " " + L.checksPassed;
+}
+render();
+</script>
+</body>
+</html>

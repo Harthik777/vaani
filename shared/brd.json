@@ -1,0 +1,36 @@
+{
+  "CHECKLIST": [
+    { "key": "objective", "label": "Goal / problem", "question": "What problem should this solve, and what is the main goal?" },
+    { "key": "users", "label": "Users and stakeholders", "question": "Who will use this, and roughly how many people?" },
+    { "key": "features", "label": "Key features", "question": "What are the most important things it must do?" },
+    { "key": "timeline", "label": "Timeline", "question": "By when do you need it ready?" },
+    { "key": "budget", "label": "Budget", "question": "What budget have you planned for this?" },
+    { "key": "success", "label": "Success measure", "question": "How will you know it is working? What result do you expect?" },
+    { "key": "constraints", "label": "Constraints", "question": "Are there any constraints, such as languages, devices, internet access or regulations?" },
+    { "key": "approver", "label": "Sign-off owner", "question": "Who will approve this document and the final product?" }
+  ],
+  "SECTIONS": [
+    { "key": "executive_summary", "title": "Executive summary" },
+    { "key": "objectives", "title": "Business objectives" },
+    { "key": "stakeholders", "title": "Stakeholders and users" },
+    { "key": "in_scope", "title": "In scope" },
+    { "key": "out_of_scope", "title": "Out of scope" },
+    { "key": "non_functional", "title": "Non-functional requirements" },
+    { "key": "assumptions", "title": "Assumptions" },
+    { "key": "constraints", "title": "Constraints" },
+    { "key": "dependencies", "title": "Dependencies" },
+    { "key": "risks", "title": "Risks" },
+    { "key": "success_metrics", "title": "Success metrics" },
+    { "key": "timeline", "title": "Timeline and budget" }
+  ],
+  "ANSWER_SECTIONS": {
+    "objective": "objectives",
+    "users": "stakeholders",
+    "approver": "stakeholders",
+    "features": "in_scope",
+    "timeline": "timeline",
+    "budget": "timeline",
+    "success": "success_metrics",
+    "constraints": "constraints"
+  }
+}

@@ -1,0 +1,308 @@
+{
+  "title": "Spice wholesale stock and order app",
+  "domain": "Spice wholesale trading (MSME)",
+  "speakers": [
+    "Owner",
+    "Manager"
+  ],
+  "transcript": {
+    "english": "[Owner] We run a spice wholesale business in Indore. We want a simple app to track stock and orders, because right now everything is written in notebooks and we lose orders.\n[Owner] When cardamom stock falls below 50 kg, the app should alert me to reorder.\n[Owner] Every order above 20,000 rupees needs my approval before dispatch.\n[Manager] Our staff only speak Hindi, so the app must work fully in Hindi.\n[Manager] The reorder alert should come when stock goes below 100 kg, because 50 kg is too late during the festival season.\n[Manager] The daily sales report should reach the owner on WhatsApp every evening.",
+    "hindi": "[Owner] हम इंदौर में मसालों का थोक व्यापार करते हैं। हमें स्टॉक और ऑर्डर ट्रैक करने के लिए एक आसान ऐप चाहिए, क्योंकि अभी सब कुछ कॉपी में लिखा जाता है और ऑर्डर छूट जाते हैं।\n[Owner] जब इलायची का स्टॉक 50 किलो से कम हो जाए, तो ऐप मुझे दोबारा ऑर्डर करने का अलर्ट दे।\n[Owner] 20,000 रुपये से ज़्यादा के हर ऑर्डर को डिस्पैच से पहले मेरी मंज़ूरी चाहिए।\n[Manager] हमारा स्टाफ सिर्फ हिंदी बोलता है, इसलिए ऐप पूरी तरह हिंदी में चलना चाहिए।\n[Manager] दोबारा ऑर्डर का अलर्ट तब आना चाहिए जब स्टॉक 100 किलो से कम हो, क्योंकि त्योहार के सीज़न में 50 किलो बहुत देर हो जाती है।\n[Manager] रोज़ की बिक्री की रिपोर्ट हर शाम मालिक को व्हाट्सऐप पर पहुँचनी चाहिए।",
+    "kannada": "[Owner] ನಾವು ಬೆಂಗಳೂರಿನ ಕೆ.ಆರ್. ಮಾರ್ಕೆಟ್‌ನಲ್ಲಿ ಮಸಾಲೆ ಸಗಟು ವ್ಯಾಪಾರ ಮಾಡುತ್ತೇವೆ. ಸ್ಟಾಕ್ ಮತ್ತು ಆರ್ಡರ್ ಟ್ರ್ಯಾಕ್ ಮಾಡಲು ನಮಗೆ ಒಂದು ಸರಳ ಆ್ಯಪ್ ಬೇಕು, ಏಕೆಂದರೆ ಈಗ ಎಲ್ಲವನ್ನೂ ಪುಸ್ತಕದಲ್ಲಿ ಬರೆಯುತ್ತೇವೆ ಮತ್ತು ಆರ್ಡರ್‌ಗಳು ತಪ್ಪಿ ಹೋಗುತ್ತವೆ.\n[Owner] ಏಲಕ್ಕಿ ಸ್ಟಾಕ್ 50 ಕೆಜಿಗಿಂತ ಕಡಿಮೆಯಾದಾಗ, ಆ್ಯಪ್ ನನಗೆ ಮತ್ತೆ ಆರ್ಡರ್ ಮಾಡಲು ಅಲರ್ಟ್ ಕೊಡಬೇಕು.\n[Owner] 20,000 ರೂಪಾಯಿಗಿಂತ ಹೆಚ್ಚಿನ ಪ್ರತಿ ಆರ್ಡರ್‌ಗೆ ಡಿಸ್ಪ್ಯಾಚ್ ಮೊದಲು ನನ್ನ ಅನುಮತಿ ಬೇಕು.\n[Manager] ನಮ್ಮ ಸಿಬ್ಬಂದಿ ಕನ್ನಡ ಮಾತ್ರ ಮಾತನಾಡುತ್ತಾರೆ, ಆದ್ದರಿಂದ ಆ್ಯಪ್ ಪೂರ್ತಿ ಕನ್ನಡದಲ್ಲಿ ಇರಬೇಕು.\n[Manager] ಸ್ಟಾಕ್ 100 ಕೆಜಿಗಿಂತ ಕಡಿಮೆಯಾದಾಗಲೇ ಮತ್ತೆ ಆರ್ಡರ್ ಅಲರ್ಟ್ ಬರಬೇಕು, ಏಕೆಂದರೆ ಹಬ್ಬದ ಸೀಸನ್‌ನಲ್ಲಿ 50 ಕೆಜಿ ತುಂಬಾ ತಡವಾಗುತ್ತದೆ.\n[Manager] ದಿನದ ಮಾರಾಟದ ವರದಿ ಪ್ರತಿ ಸಂಜೆ ಮಾಲೀಕರಿಗೆ WhatsApp ನಲ್ಲಿ ತಲುಪಬೇಕು."
+  },
+  "rules": {
+    "english": [
+      {
+        "id": "r1",
+        "title": "Low-stock reorder alert (Owner's threshold)",
+        "condition": "cardamom stock falls below 50 kg",
+        "action": "alert the owner to reorder",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "inventory",
+        "speaker": "Owner",
+        "source_quote": "When cardamom stock falls below 50 kg, the app should alert me to reorder.",
+        "numbers": [
+          {
+            "value": "50",
+            "spoken": "50 kg"
+          }
+        ]
+      },
+      {
+        "id": "r2",
+        "title": "High-value order approval",
+        "condition": "an order is above 20,000 rupees",
+        "action": "require the owner's approval before dispatch",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "approval",
+        "speaker": "Owner",
+        "source_quote": "Every order above 20,000 rupees needs my approval before dispatch.",
+        "numbers": [
+          {
+            "value": "20,000",
+            "spoken": "20,000 rupees"
+          }
+        ]
+      },
+      {
+        "id": "r3",
+        "title": "Hindi-first interface",
+        "condition": "any staff member uses the app",
+        "action": "show the complete app in Hindi",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "usability",
+        "speaker": "Manager",
+        "source_quote": "Our staff only speak Hindi, so the app must work fully in Hindi.",
+        "numbers": []
+      },
+      {
+        "id": "r4",
+        "title": "Low-stock reorder alert (Manager's threshold)",
+        "condition": "stock goes below 100 kg",
+        "action": "send the reorder alert",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "inventory",
+        "speaker": "Manager",
+        "source_quote": "The reorder alert should come when stock goes below 100 kg",
+        "numbers": [
+          {
+            "value": "100",
+            "spoken": "100 kg"
+          }
+        ]
+      },
+      {
+        "id": "r5",
+        "title": "Daily sales report on WhatsApp",
+        "condition": "every evening",
+        "action": "send the daily sales report to the owner on WhatsApp",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "reporting",
+        "speaker": "Manager",
+        "source_quote": "The daily sales report should reach the owner on WhatsApp every evening.",
+        "numbers": []
+      }
+    ],
+    "hindi": [
+      {
+        "id": "r1",
+        "title": "Low-stock reorder alert (Owner's threshold)",
+        "condition": "cardamom stock falls below 50 kg",
+        "action": "alert the owner to reorder",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "inventory",
+        "speaker": "Owner",
+        "source_quote": "जब इलायची का स्टॉक 50 किलो से कम हो जाए, तो ऐप मुझे दोबारा ऑर्डर करने का अलर्ट दे।",
+        "numbers": [
+          {
+            "value": "50",
+            "spoken": "50 किलो"
+          }
+        ]
+      },
+      {
+        "id": "r2",
+        "title": "High-value order approval",
+        "condition": "an order is above 20,000 rupees",
+        "action": "require the owner's approval before dispatch",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "approval",
+        "speaker": "Owner",
+        "source_quote": "20,000 रुपये से ज़्यादा के हर ऑर्डर को डिस्पैच से पहले मेरी मंज़ूरी चाहिए।",
+        "numbers": [
+          {
+            "value": "20,000",
+            "spoken": "20,000 रुपये"
+          }
+        ]
+      },
+      {
+        "id": "r3",
+        "title": "Hindi-first interface",
+        "condition": "any staff member uses the app",
+        "action": "show the complete app in Hindi",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "usability",
+        "speaker": "Manager",
+        "source_quote": "हमारा स्टाफ सिर्फ हिंदी बोलता है, इसलिए ऐप पूरी तरह हिंदी में चलना चाहिए।",
+        "numbers": []
+      },
+      {
+        "id": "r4",
+        "title": "Low-stock reorder alert (Manager's threshold)",
+        "condition": "stock goes below 100 kg",
+        "action": "send the reorder alert",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "inventory",
+        "speaker": "Manager",
+        "source_quote": "दोबारा ऑर्डर का अलर्ट तब आना चाहिए जब स्टॉक 100 किलो से कम हो",
+        "numbers": [
+          {
+            "value": "100",
+            "spoken": "100 किलो"
+          }
+        ]
+      },
+      {
+        "id": "r5",
+        "title": "Daily sales report on WhatsApp",
+        "condition": "every evening",
+        "action": "send the daily sales report to the owner on WhatsApp",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "reporting",
+        "speaker": "Manager",
+        "source_quote": "रोज़ की बिक्री की रिपोर्ट हर शाम मालिक को व्हाट्सऐप पर पहुँचनी चाहिए।",
+        "numbers": []
+      }
+    ],
+    "kannada": [
+      {
+        "id": "r1",
+        "title": "Low-stock reorder alert (Owner's threshold)",
+        "condition": "cardamom stock falls below 50 kg",
+        "action": "alert the owner to reorder",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "inventory",
+        "speaker": "Owner",
+        "source_quote": "ಏಲಕ್ಕಿ ಸ್ಟಾಕ್ 50 ಕೆಜಿಗಿಂತ ಕಡಿಮೆಯಾದಾಗ, ಆ್ಯಪ್ ನನಗೆ ಮತ್ತೆ ಆರ್ಡರ್ ಮಾಡಲು ಅಲರ್ಟ್ ಕೊಡಬೇಕು.",
+        "numbers": [
+          {
+            "value": "50",
+            "spoken": "50 ಕೆಜಿ"
+          }
+        ]
+      },
+      {
+        "id": "r2",
+        "title": "High-value order approval",
+        "condition": "an order is above 20,000 rupees",
+        "action": "require the owner's approval before dispatch",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "approval",
+        "speaker": "Owner",
+        "source_quote": "20,000 ರೂಪಾಯಿಗಿಂತ ಹೆಚ್ಚಿನ ಪ್ರತಿ ಆರ್ಡರ್‌ಗೆ ಡಿಸ್ಪ್ಯಾಚ್ ಮೊದಲು ನನ್ನ ಅನುಮತಿ ಬೇಕು.",
+        "numbers": [
+          {
+            "value": "20,000",
+            "spoken": "20,000 ರೂಪಾಯಿ"
+          }
+        ]
+      },
+      {
+        "id": "r3",
+        "title": "Kannada-first interface",
+        "condition": "any staff member uses the app",
+        "action": "show the complete app in Kannada",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "usability",
+        "speaker": "Manager",
+        "source_quote": "ನಮ್ಮ ಸಿಬ್ಬಂದಿ ಕನ್ನಡ ಮಾತ್ರ ಮಾತನಾಡುತ್ತಾರೆ, ಆದ್ದರಿಂದ ಆ್ಯಪ್ ಪೂರ್ತಿ ಕನ್ನಡದಲ್ಲಿ ಇರಬೇಕು.",
+        "numbers": []
+      },
+      {
+        "id": "r4",
+        "title": "Low-stock reorder alert (Manager's threshold)",
+        "condition": "stock goes below 100 kg",
+        "action": "send the reorder alert",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "inventory",
+        "speaker": "Manager",
+        "source_quote": "ಸ್ಟಾಕ್ 100 ಕೆಜಿಗಿಂತ ಕಡಿಮೆಯಾದಾಗಲೇ ಮತ್ತೆ ಆರ್ಡರ್ ಅಲರ್ಟ್ ಬರಬೇಕು",
+        "numbers": [
+          {
+            "value": "100",
+            "spoken": "100 ಕೆಜಿ"
+          }
+        ]
+      },
+      {
+        "id": "r5",
+        "title": "Daily sales report on WhatsApp",
+        "condition": "every evening",
+        "action": "send the daily sales report to the owner on WhatsApp",
+        "exception": null,
+        "confidence": "HIGH",
+        "type": "reporting",
+        "speaker": "Manager",
+        "source_quote": "ದಿನದ ಮಾರಾಟದ ವರದಿ ಪ್ರತಿ ಸಂಜೆ ಮಾಲೀಕರಿಗೆ WhatsApp ನಲ್ಲಿ ತಲುಪಬೇಕು.",
+        "numbers": []
+      }
+    ]
+  },
+  "review_notes": [
+    "The owner and the manager gave different reorder thresholds for the same alert. Resolve before sign-off."
+  ],
+  "conflicts": [
+    {
+      "rule_ids": [
+        "r1",
+        "r4"
+      ],
+      "topic": "Reorder alert threshold",
+      "explanation": "Owner wants the reorder alert below 50 kg; Manager wants it below 100 kg."
+    }
+  ],
+  "coverage": {
+    "english": {
+      "objective": "We want a simple app to track stock and orders, because right now everything is written in notebooks and we lose orders.",
+      "features": "When cardamom stock falls below 50 kg, the app should alert me to reorder.",
+      "constraints": "Our staff only speak Hindi, so the app must work fully in Hindi."
+    },
+    "hindi": {
+      "objective": "हमें स्टॉक और ऑर्डर ट्रैक करने के लिए एक आसान ऐप चाहिए, क्योंकि अभी सब कुछ कॉपी में लिखा जाता है और ऑर्डर छूट जाते हैं।",
+      "features": "जब इलायची का स्टॉक 50 किलो से कम हो जाए, तो ऐप मुझे दोबारा ऑर्डर करने का अलर्ट दे।",
+      "constraints": "हमारा स्टाफ सिर्फ हिंदी बोलता है, इसलिए ऐप पूरी तरह हिंदी में चलना चाहिए।"
+    },
+    "kannada": {
+      "objective": "ಸ್ಟಾಕ್ ಮತ್ತು ಆರ್ಡರ್ ಟ್ರ್ಯಾಕ್ ಮಾಡಲು ನಮಗೆ ಒಂದು ಸರಳ ಆ್ಯಪ್ ಬೇಕು, ಏಕೆಂದರೆ ಈಗ ಎಲ್ಲವನ್ನೂ ಪುಸ್ತಕದಲ್ಲಿ ಬರೆಯುತ್ತೇವೆ ಮತ್ತು ಆರ್ಡರ್‌ಗಳು ತಪ್ಪಿ ಹೋಗುತ್ತವೆ.",
+      "features": "ಏಲಕ್ಕಿ ಸ್ಟಾಕ್ 50 ಕೆಜಿಗಿಂತ ಕಡಿಮೆಯಾದಾಗ, ಆ್ಯಪ್ ನನಗೆ ಮತ್ತೆ ಆರ್ಡರ್ ಮಾಡಲು ಅಲರ್ಟ್ ಕೊಡಬೇಕು.",
+      "constraints": "ನಮ್ಮ ಸಿಬ್ಬಂದಿ ಕನ್ನಡ ಮಾತ್ರ ಮಾತನಾಡುತ್ತಾರೆ, ಆದ್ದರಿಂದ ಆ್ಯಪ್ ಪೂರ್ತಿ ಕನ್ನಡದಲ್ಲಿ ಇರಬೇಕು."
+    }
+  },
+  "sample_answers": {
+    "english": {
+      "users": "About 12 people will use it: me, the manager and 10 staff members.",
+      "timeline": "We need it before Diwali, within 2 months.",
+      "budget": "Our budget is around 1.5 lakh rupees.",
+      "success": "No order should be missed, and we should never run out of cardamom stock.",
+      "approver": "I will approve it myself, as the owner.",
+      "objective": "We want to stop losing orders that are written in notebooks.",
+      "features": "Stock tracking, reorder alerts, order approval and a daily sales report.",
+      "constraints": "It must work fully in Hindi on cheap Android phones."
+    },
+    "hindi": {
+      "users": "लगभग 12 लोग इसे इस्तेमाल करेंगे: मैं, मैनेजर और 10 स्टाफ।",
+      "timeline": "हमें यह दिवाली से पहले, 2 महीने के अंदर चाहिए।",
+      "budget": "हमारा बजट लगभग 1.5 लाख रुपये है।",
+      "success": "कोई ऑर्डर नहीं छूटना चाहिए, और इलायची का स्टॉक कभी खत्म नहीं होना चाहिए।",
+      "approver": "मालिक होने के नाते मैं खुद इसे मंज़ूर करूँगा।",
+      "objective": "हम कॉपी में लिखे ऑर्डर छूटना बंद करना चाहते हैं।",
+      "features": "स्टॉक ट्रैकिंग, दोबारा ऑर्डर का अलर्ट, ऑर्डर मंज़ूरी और रोज़ की बिक्री रिपोर्ट।",
+      "constraints": "ऐप सस्ते एंड्रॉइड फ़ोन पर पूरी तरह हिंदी में चलना चाहिए।"
+    },
+    "kannada": {
+      "users": "ಸುಮಾರು 12 ಜನ ಇದನ್ನು ಬಳಸುತ್ತಾರೆ: ನಾನು, ಮ್ಯಾನೇಜರ್ ಮತ್ತು 10 ಸಿಬ್ಬಂದಿ.",
+      "timeline": "ನಮಗೆ ಇದು ದೀಪಾವಳಿಗೆ ಮೊದಲು, 2 ತಿಂಗಳೊಳಗೆ ಬೇಕು.",
+      "budget": "ನಮ್ಮ ಬಜೆಟ್ ಸುಮಾರು 1.5 ಲಕ್ಷ ರೂಪಾಯಿ.",
+      "success": "ಯಾವುದೇ ಆರ್ಡರ್ ತಪ್ಪಬಾರದು, ಮತ್ತು ಏಲಕ್ಕಿ ಸ್ಟಾಕ್ ಎಂದಿಗೂ ಖಾಲಿಯಾಗಬಾರದು.",
+      "approver": "ಮಾಲೀಕನಾಗಿ ನಾನೇ ಇದನ್ನು ಅನುಮೋದಿಸುತ್ತೇನೆ.",
+      "objective": "ಪುಸ್ತಕದಲ್ಲಿ ಬರೆದ ಆರ್ಡರ್‌ಗಳು ತಪ್ಪಿ ಹೋಗುವುದನ್ನು ನಿಲ್ಲಿಸಬೇಕು.",
+      "features": "ಸ್ಟಾಕ್ ಟ್ರ್ಯಾಕಿಂಗ್, ಮತ್ತೆ ಆರ್ಡರ್ ಅಲರ್ಟ್, ಆರ್ಡರ್ ಅನುಮತಿ ಮತ್ತು ದಿನದ ಮಾರಾಟದ ವರದಿ.",
+      "constraints": "ಆ್ಯಪ್ ಅಗ್ಗದ ಆಂಡ್ರಾಯ್ಡ್ ಫೋನ್‌ನಲ್ಲಿ ಪೂರ್ತಿ ಕನ್ನಡದಲ್ಲಿ ಕೆಲಸ ಮಾಡಬೇಕು."
+    }
+  }
+}

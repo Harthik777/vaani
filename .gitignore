@@ -1,0 +1,13 @@
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.env
+dist/
+.DS_Store
+backend/data/
+test-results/
+playwright-report/
+
+backend/benchmark.json
+frontend/test-results/
