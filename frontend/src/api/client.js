@@ -114,6 +114,13 @@ export const api = {
   publish: (body, key) => post("/api/portals", body, { key }),
   transliterate: body => post("/api/transliterate", body, { timeout: 60000 }),
   demoVoices: lang => post("/api/demo/voices", { lang }, { timeout: 90000 }),
+  scenario: body => post("/api/agent/scenario", body, { timeout: 45000 }),
+  deadlines: body => post("/api/brd/deadlines", body, { timeout: 45000 }),
+  ics: body => request("/api/brd/ics", { method: "POST", body, binary: true }),
+  googleStatus: email => request("/api/google/status?email=" + encodeURIComponent(email || "")),
+  googleStart: email => request("/api/google/start?email=" + encodeURIComponent(email || "")),
+  googlePush: body => post("/api/google/push", body, { timeout: 120000 }),
+  resolve: body => post("/api/agent/resolve", body, { timeout: 45000 }),
   async help(body) {
     try { return await post("/api/help", body, { timeout: 40000 }); }
     catch (e) {

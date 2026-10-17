@@ -741,3 +741,27 @@ body.a11y-lowVision{font-size:19px}.a11y-lowVision .card,.a11y-lowVision .widget
 .prefetch-note{font-style:italic}
 
 .synthetic-note{color:var(--mute);font-style:italic}
+
+/* ── One obvious path per screen ─────────────────────────────────── */
+.more-ways,.review-more{margin:14px 0 4px}.more-ways summary,.review-more summary{font-size:.9rem;color:var(--mute);padding:6px 0;cursor:pointer}
+.more-ways .import-row{margin-top:10px}.review-more .view-toggle{margin:12px 0 6px}
+.timings{font-family:var(--mono);font-size:.78rem;color:var(--mute);margin:4px 0 10px}
+
+/* ── Executable requirements + mediation ─────────────────────────── */
+.scenario{margin-top:14px}.scenario h2{font-size:1.15rem;margin:2px 0 6px}
+.scenario-row{display:flex;gap:8px;margin:10px 0}.scenario-row input{flex:1;margin:0}
+.scenario-results{list-style:none;padding:0;margin:8px 0 0}.scenario-results li{padding:9px 12px;border-left:3px solid var(--line);margin:6px 0;background:var(--card-2);border-radius:0 6px 6px 0}
+.scenario-results li.fires{border-left-color:var(--teal)}.scenario-results .fire{font-weight:700;margin-right:8px}.scenario-results li.fires .fire{color:var(--teal)}
+.scenario-results .because{display:block;color:var(--mute);font-size:.9rem;margin-top:3px}
+.proposal{margin-top:14px;padding:14px 16px;border:1px dashed var(--teal);border-radius:8px;background:#fff}
+.proposal h3{margin:4px 0}.proposal-q{margin:8px 0 0;font-size:.95rem}
+
+/* ── Deadlines, Google, email at the start ───────────────────────── */
+.email-start{display:block;margin:4px 0 14px}.email-start input{max-width:420px}.email-start .source-note{display:block;margin-top:4px}
+.deadlines{margin:14px 0}.deadlines-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}.deadlines h2{font-size:1.15rem;margin:2px 0 4px}
+.deadline-list{list-style:none;padding:0;margin:10px 0 0}.deadline-list li{display:grid;grid-template-columns:110px 1fr auto;gap:12px;align-items:start;padding:10px 0;border-top:1px solid var(--line)}
+.dl-date{font-family:var(--mono);font-weight:700;color:var(--teal)}.dl-confirm,.dl-kind{color:var(--mute)}.dl-confirm{color:var(--clay)}
+.deadline-list q{display:block;color:var(--body);font-size:.9rem;margin-top:3px}.dl-add{white-space:nowrap;text-decoration:none;padding:6px 10px;font-size:.85rem}
+.google-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}.google-row label{margin:0}.google-row input{margin:0;min-width:240px}
+@media(max-width:760px){.deadline-list li{grid-template-columns:1fr}}
+.dl-note{display:block;margin-top:3px}

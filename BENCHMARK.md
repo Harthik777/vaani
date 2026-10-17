@@ -1,6 +1,6 @@
 # VAANI measured accuracy
 
-Generated 2026-10-17 14:13 by `backend/benchmark.py`. Re-run after any change to the verifier or the agent prompts.
+Generated 2026-10-17 22:42 by `backend/benchmark.py`. Re-run after any change to the verifier or the agent prompts.
 
 ## 1. Verifier (deterministic, no AI involved)
 
@@ -25,16 +25,16 @@ Brains used: sarvam:sarvam-105b-conversations ×11.
 | Rule set | Expected | Found | Brain | s |
 |---|---|---|---|---|
 | meeting english (owner 50 kg vs manager 100 kg) | [['r1', 'r4']] | [['r1', 'r4']] | sarvam:sarvam-105b-conversations | 0.6 |
-| meeting english without the manager's threshold | — | — | sarvam:sarvam-105b-conversations | 0.5 |
-| meeting hindi (owner 50 kg vs manager 100 kg) | [['r1', 'r4']] | [['r1', 'r4']] | sarvam:sarvam-105b-conversations | 0.6 |
-| meeting hindi without the manager's threshold | — | — | sarvam:sarvam-105b-conversations | 0.4 |
-| meeting kannada (owner 50 kg vs manager 100 kg) | [['r1', 'r4']] | [['r1', 'r4']] | sarvam:sarvam-105b-conversations | 0.6 |
-| meeting kannada without the manager's threshold | — | — | sarvam:sarvam-105b-conversations | 0.4 |
-| delivery days | [['r1', 'r2']] | [['r1', 'r2']] | sarvam:sarvam-105b-conversations | 0.5 |
+| meeting english without the manager's threshold | — | — | sarvam:sarvam-105b-conversations | 0.3 |
+| meeting hindi (owner 50 kg vs manager 100 kg) | [['r1', 'r4']] | [['r1', 'r4']] | sarvam:sarvam-105b-conversations | 0.0 |
+| meeting hindi without the manager's threshold | — | — | sarvam:sarvam-105b-conversations | 0.0 |
+| meeting kannada (owner 50 kg vs manager 100 kg) | [['r1', 'r4']] | [['r1', 'r4']] | sarvam:sarvam-105b-conversations | 0.5 |
+| meeting kannada without the manager's threshold | — | — | sarvam:sarvam-105b-conversations | 0.3 |
+| delivery days | [['r1', 'r2']] | [['r1', 'r2']] | sarvam:sarvam-105b-conversations | 0.4 |
 | budget and approver | [['r1', 'r2'], ['r3', 'r4']] | [['r1', 'r2'], ['r3', 'r4']] | sarvam:sarvam-105b-conversations | 0.6 |
-| related but not contradictory | — | — | sarvam:sarvam-105b-conversations | 0.4 |
-| same speaker, different numbers (not a stakeholder conflict) | — | — | sarvam:sarvam-105b-conversations | 0.4 |
-| credit period | [['r1', 'r2']] | [['r1', 'r2']] | sarvam:sarvam-105b-conversations | 0.5 |
+| related but not contradictory | — | — | sarvam:sarvam-105b-conversations | 0.5 |
+| same speaker, different numbers (not a stakeholder conflict) | — | — | sarvam:sarvam-105b-conversations | 0.7 |
+| credit period | [['r1', 'r2']] | [['r1', 'r2']] | sarvam:sarvam-105b-conversations | 0.6 |
 
 ## How to say it on stage
 

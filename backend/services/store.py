@@ -42,3 +42,15 @@ def update_ticket(ident, payload):
     # Published documents and evidence deliberately have no update operation.
     with connect() as db:
         db.execute("UPDATE artifacts SET payload=? WHERE id=? AND kind='ticket'", (json.dumps(payload, ensure_ascii=False), ident))
+
+
+def put_account(ident, payload):
+    """Keyed record (e.g. a connected Google account). Stays on this machine."""
+    with connect() as db:
+        db.execute("INSERT OR REPLACE INTO artifacts VALUES (?, ?, ?, ?, ?, ?)", (ident, "account", "", json.dumps(payload), None, None))
+
+
+def get_account(ident):
+    with connect() as db:
+        row = db.execute("SELECT payload FROM artifacts WHERE id=? AND kind='account'", (ident,)).fetchone()
+    return json.loads(row["payload"]) if row else None

@@ -3,7 +3,7 @@ import { api, playClips } from "../api/client.js";
 
 // The in-app guide: a small panel that answers "what do I do now?" for the current step, in the user's language.
 // Deterministic answers come from the server even without AI; with AI configured, Sarvam 105B answers the question.
-export default function HelpBot({ phase, lang, langLabel, counts, sarvamVoice, a11y, onSarvamUsed }) {
+export default function HelpBot({ t = s => s, phase, lang, langLabel, counts, sarvamVoice, a11y, onSarvamUsed }) {
   const [open, setOpen] = useState(false), [messages, setMessages] = useState([]), [input, setInput] = useState("");
   const [busy, setBusy] = useState(false), [suggestions, setSuggestions] = useState([]), [speaking, setSpeaking] = useState(false);
   const stop = useRef(null), list = useRef(null);
@@ -38,7 +38,7 @@ export default function HelpBot({ phase, lang, langLabel, counts, sarvamVoice, a
     } catch { setSpeaking(false); }
   };
   return <div className={"helpbot" + (open ? " open" : "")}>
-    {!open && <button className="help-fab" onClick={() => setOpen(true)} aria-label="Open the guide">? Help</button>}
+    {!open && <button className="help-fab" onClick={() => setOpen(true)} aria-label="Open the guide">? {t("Help")}</button>}
     {open && <section className="help-panel" aria-label="Guide">
       <header><strong>Guide</strong><span className="source-note">answers in {langLabel}</span><button className="btn-link" onClick={() => { stop.current?.(); setOpen(false); }} aria-label="Close the guide">Close</button></header>
       <div className="help-list" ref={list}>

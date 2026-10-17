@@ -4,8 +4,8 @@ from fastapi.staticfiles import StaticFiles
 from routes.portals import FRONTEND_DIST, share_base
 from fastapi.middleware.cors import CORSMiddleware
 
-from routes import extract, brd, screenspec, tts, upi, stt, evidence, portals, tickets, agent, app_gen, notes, qr, exports, demo, help as help_routes
-from services import config, llm, sarvam, mailer
+from routes import extract, brd, screenspec, tts, upi, stt, evidence, portals, tickets, agent, app_gen, notes, qr, exports, demo, reason, integrations, help as help_routes
+from services import config, llm, sarvam, mailer, google_sync
 from services.limiter import InMemoryRateLimiter
 
 app = FastAPI(title="Vaani API")
@@ -29,7 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for module in (stt, notes, extract, agent, screenspec, brd, tts, app_gen, upi, evidence, portals, tickets, qr, exports, demo, help_routes):
+for module in (stt, notes, extract, agent, screenspec, brd, tts, app_gen, upi, evidence, portals, tickets, qr, exports, demo, reason, integrations, help_routes):
     app.include_router(module.router)
 # The built frontend (frontend/dist, from `npx vite build`) is served here so one LAN or tunnel address opens the whole app on a phone.
 if FRONTEND_DIST.exists():
@@ -61,6 +61,7 @@ def health(request: Request):
         "cache": config.CACHE_ENABLED,
         "share": {"base": app_base, "reach": reach},
         "email": mailer.enabled(),
+        "google": google_sync.enabled(),
     }
 
 

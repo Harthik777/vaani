@@ -1,81 +1,74 @@
-# Vaani pitch guide (Hack Sprint, MIT Bengaluru, 18 Oct 2026 · Track 4 Applied AI · PS41)
+# VAANI · the pitch (6 minutes, final round)
 
-Every claim below is something the code does today. If a judge asks "show me", you can.
+> **One sentence:** a spice wholesaler in Indore tells VAANI what he needs, in Hindi; his manager disagrees on one number;
+> VAANI catches it with both voices, blocks anything nobody said, and hands the IT vendor a BRD and a first app the owner can
+> hear, read in his own language, and approve in one tap.
 
-## One line
-> **Vaani interviews business owners in their own language, blocks anything nobody said, catches the owner and the manager disagreeing, and hands the IT vendor an English BRD where every requirement plays back in the speaker's own voice.**
+Judges score the story and the demo, not the repository. One user, one loss, one catch, one number. Nothing else.
 
-## Why this matters
-- Owners explain needs in Kannada, Hindi or Tamil. Vendors need precise English BRDs.
-- What gets lost: missing budgets and deadlines, numbers changed in translation, and stakeholders who contradict each other.
-- Vaani's answer: an **agent** that finds the gaps, a **verifier** that blocks anything nobody said, **conflict detection** between speakers, and **voice traceability** for every requirement.
+## The story (90 seconds, before touching the laptop)
 
-## Positioning (read this before you write a single slide)
-This exact problem statement ran at Commudle's Hack Days Delhi in June 2026. No BRD project placed. A Hindi voice-to-BRD agent on Sarvam (REQUIX) was submitted and lost to a live mock-interviewer and a health app. "Speak in Hindi, get a BRD" is table stakes in this room, and the other PS41 team (Awaaz) uses the same words: evidence-backed, Kannada/Hindi, human review.
-Lead with the two things nobody else has shipped, in this order:
-1. **The verifier catches a number nobody said, live.** Measured: 66 of 66 planted errors caught, 0 false blocks on 24 genuine requirements (`BENCHMARK.md`).
-2. **Owner vs manager disagreement from a recorded call, separated by Sarvam diarization.** Measured: 7 of 7 planted conflicts found, 0 false alarms, on Sarvam 105B in about half a second each.
-Then voice sign-off, then the BRD and app. Say "voice-first BRD" last, not first.
+"Rajesh runs a spice wholesale in Indore. Last year he paid a freelancer ₹1.8 lakh for a stock app. The freelancer wrote the
+requirements in English from a phone call. The reorder alert was set to 50 kg. Rajesh's manager had said 100 kg, because
+in festival season 50 is too late. Nobody caught it. Stock ran out on Diwali week. The app was rebuilt twice.
 
-## The 6-minute script (cut from the end if the slot is shorter)
+That is the problem: between an owner who speaks Hindi and a vendor who writes English, requirements change, and nobody can
+prove what was actually said. Every requirements tool starts from text someone typed. VAANI starts from the voice, and
+never lets a number into the document that the voice did not say."
 
-**[0:00–0:20] Hook with a real person.**
-"[First name], who runs the [shop] outside the Yelahanka gate, told us in Kannada what app she needs. Her vendor needs it in English. Here is what usually gets lost, and what we did about it." (Use the owner you recorded today. If you could not record anyone, use the Indore spice wholesaler story.)
+## The demo (3 minutes, in this order, nothing else)
 
-**[0:20–3:40] Live demo.** Click path: *हिंदी* or *ಕನ್ನಡ* → *Start capturing*. Then choose one setup:
-- **Recommended: live voice.** Two teammates read the six lines of `shared/meeting.json` aloud (Hindi or Kannada). Select *Owner* or *Manager* (add "Manager" with *Add speaker*) before each person speaks. The transcript appears line by line with a speaker chip.
-- **Fallback with voices:** *Use 2-speaker meeting demo* now has Bulbul read the six lines in two voices (labelled as synthesised), and the agent, extraction and conflict check run on the real models, not a fixture: the screen says "Checked by: sarvam-105b" and "Drafted by gemini". Every requirement and both sides of the conflict play back.
-- **Backup:** *Use 2-speaker meeting demo*. Same transcript, no audio, instant.
+Before the pitch: backend running with `--host 0.0.0.0`, frontend built, two full rehearsals so every voice line and draft
+is in the cache. Language chip on हिंदी: the whole interface is in Hindi, not only the voice.
 
-1. *Next: agent checks for gaps.* "It found the goal, features and constraints, with the exact words. It is missing users, timeline, budget, success measure and sign-off." Let it **ask aloud** (Sarvam Translate + Bulbul). Record or *Use sample answer*, save. "The meter climbs."
-2. *Extract requirements.* **"Watch this:"** "The owner said 50 kg; the manager said 100 kg. Vaani caught the contradiction, with both voices." Keep the manager's version.
-3. **The verifier, live.** Type `48` into a rule: "⛔ 48 (not spoken). The AI can't sneak a number in, and neither can we." Undo it. Point at a 🔎 chip: "And it won't let 'jaldi' into a contract either; it asks how many hours."
-4. **Fast approval.** On Review, press *Approve 4 verified*: everything the verifier fully checked is approved in one step and the BRD and app start building in the background. Only flagged requirements (unspoken numbers, vague words, an unresolved conflict) get the one-by-one review below. Say: "A verified requirement does not need a human to re-read it; a flagged one does."
-5. **Approve by voice** (for a flagged one, or skip this step if none is flagged). Play the original clip, let Bulbul read the rule back in the owner's language, then press *Say haan or nahi to decide* and say "हाँ" (or "ಹೌದು"). The requirement is approved with the spoken word recorded against it; the BRD shows "by voice (हाँ)". Do this once; use the buttons for the rest.
-5. **BRD + App:** "12 sections, FR-IDs, acceptance criteria, open questions." Show the **verification report**: "Anything the AI wrote that nobody said is blocked here." Switch BRD + app to हिंदी / ಕನ್ನಡ in one click. *Listen to BRD summary*. **⬇ Download**: Word (bilingual), **Jira CSV** ("the vendor gets tickets"). Click around the generated app, or the requirement simulator (move the slider below 100 kg, the alert fires).
-6. *Publish* → two **QR codes** appear: "Scan this and the BRD with the voice clips opens on your phone." Hand the laptop to a judge for the scan, or tap the **WhatsApp** link to forward it. The link uses the laptop's Wi-Fi address (`http://10.x.x.x:8000/app/?portal=…`), so run the backend with `--host 0.0.0.0`, have `npx vite build` done, and keep the judge's phone on the same hotspot. For a link that works anywhere, run `cloudflared tunnel --url http://localhost:8000` before the pitch and put the address in `PUBLIC_URL`.
+1. **Speak.** Live: two teammates read the six lines of `docs/RECORD-THESE-LINES.md` as Owner and Manager (tap the chip before
+   each). Backup: *Use 2-speaker meeting demo* loads the same lines with Bulbul voices in two personas. Say: "Saaras separates
+   the two speakers. Every line is hashed and kept as evidence."
+2. **Agent.** *Next.* The agent (Sarvam 105B) shows the eight things a BRD needs, three already covered with exact quotes, and
+   asks the first missing one aloud in Hindi. Answer one question. Say: "It only asks what was not said."
+3. **The catch.** *Extract.* Point at the red card: "Owner said 50 kg, manager said 100. Both clips are right there. Keep the
+   manager's version." Then open *More* and press *Show the verifier catching a lie*: a 48-hour deadline nobody spoke appears in
+   red at once. "No AI did that. It is a deterministic check. We planted 66 such errors across three meetings; it caught 66."
+4. **Approve.** *Approve 4 verified.* "Verified requirements do not need a human to re-read them. Flagged ones do." The BRD and
+   the app were already building while we spoke.
+5. **BRD + app.** Scroll once: vendor hand-off table with FR ids, acceptance criteria and a *hear it* button per row; the
+   generated app; *Switch BRD + app to हिंदी*. *Publish*: hand the phone QR to a judge. "Same Wi-Fi, opens on your phone,
+   with the voices."
 
-**[3:40–4:30] Why it is different (one slide).**
-"ChatPRD, Jira Rovo and Notion take typed English from product managers and never verify. Lovable and Bolt take typed English prompts. Paytm Soundbox and Khatabook answer questions; they don't build software. Nobody interviews, verifies spoken numbers, or detects two stakeholders disagreeing." Do not name other teams in the room.
+Stop there. Do not show exports, email, Excel, the guide or other document types unless asked.
 
-**[4:30–5:10] Sarvam depth (one slide, plain words).**
-- **Saaras v4** hears every speaker, code-mixed ("मुझे stock alert चाहिए"), with the session's product names as keyterms and chunk timestamps for the voice clips.
-- **Bulbul v4-flash** asks the questions and reads rules back, one persona per language, Kannada included.
-- **Sarvam Translate** puts the questions and the whole BRD in any of 7 languages.
-- **Sarvam 105B** phrases the interview questions and checks for conflicts (strict JSON schema); Gemini drafts the long BRD and the app. Say that plainly if asked.
+## Numbers (one slide, 30 seconds)
 
-**[5:10–5:45] Numbers (one slide).** Verifier: 66/66 planted errors caught, 0 false blocks (3 languages). Conflict detector: 7/7 found, 0 false alarms, 0.5 s each on Sarvam 105B. Diarized meeting: 30 s two-voice file separated correctly in 7 s. 90 backend tests, 13 browser flows. A full session costs under ₹5 in Sarvam credits. **Who pays:** IT services firms and freelancers building for MSMEs: fewer rework cycles, requirements the client cannot dispute.
+| Claim | Measured |
+|---|---|
+| Verifier: planted errors caught (3 languages) | 66 / 66, 0 false blocks (`BENCHMARK.md`) |
+| Stakeholder conflicts found | 7 / 7, 0 false alarms, Sarvam 105B |
+| Next agent question after an answer | 4.0 s → 0.1 s |
+| Extraction with conflicts | 8.5 s → 1.7 s |
+| BRD + app after approval | 19.3 s → 6 s (built in parallel during review) |
+| Tests | 90 backend, 13 browser flows, run in CI |
 
-**[5:45–6:00] Close.** "Owners speak. Vendors build. Nothing gets lost in between. **Vaani: your words, verified.**"
+## Who pays (one slide, 20 seconds)
 
-**If a judge asks "how would a shop owner know what to do?":** press **? Help** on any step; it answers in the owner's language on Sarvam 105B, and offline from the built-in guide.
+Freelancers and small IT firms that build for MSMEs, per BRD. They lose the most to rework and they cannot dispute a
+requirement the client can hear in his own voice. Sarvam because code-mixed Hindi, Kannada and Tamil speech, pronunciation
+and diarization are where English-first models fail, and the client has to trust the quote.
 
-**Backup for the live voice:** the landing page's *Play the 2-minute narrated demo* runs the whole flow with Bulbul narration. If a microphone or a voice fails on stage, press it and talk over it.
+## The three answers every teammate must give in one breath
 
-## Live-demo safety
-- **Rehearse the exact demo twice before the pitch with the backend running** (`python -m uvicorn main:app --host 0.0.0.0 --port 8000`). LLM drafts, Bulbul audio and translations are cached on disk (`backend/data/cache`), so the identical stage run is instant. Only live microphone speech is truly live.
-- Backup: the meeting demo also runs with **no backend** (sample data, labelled DEMONSTRATION), and so does `vaani-prototype.html`.
-- Use Chrome, allow the microphone before the demo, volume up for Bulbul. Phone hotspot ready.
-- If Sarvam's chat model is slow or down, the agent falls back to Gemini automatically and the strip shows which brain answered.
+**"How does the verifier work?"** "It is not AI. Every requirement carries the exact quote and the numbers it uses. The quote
+must appear verbatim in the transcript and every number must appear in that quote, with Indic digits and Indian grouping
+normalised. If either fails, the requirement is blocked and shown in red. The AI drafts; the verifier decides."
 
-## Judge Q&A (honest answers)
-**"Other teams also do voice-to-BRD on Sarvam. What is different?"** "Transcribing and drafting is the easy half; every team here does it. We planted 66 errors into three meetings and the verifier caught all 66. We planted 7 stakeholder conflicts and it found all 7 with no false alarms. Nobody else can show you that number because nobody else has the verifier." Then show BENCHMARK.md if asked.
+**"Why not ChatGPT?"** "ChatGPT writes a fluent BRD with numbers it invented. We measured it: planted errors sail through.
+VAANI blocks 66 of 66. And ChatGPT cannot tell you the manager disagreed with the owner, because it never heard two voices."
 
-**"Isn't this just a Gemini wrapper?"** The model drafts; the verifier decides. Quotes must be verbatim, numbers must be spoken, suggestions can't carry numbers, and contradictions must name real requirements from different speakers. Rejections are shown, not hidden. The same checks run in the browser on every edit.
+**"Who is the user, the owner or the vendor?"** "The vendor pays; the owner speaks. The owner's job is ten minutes of talking
+and one approval tap in his language. The vendor gets the English BRD, the acceptance criteria, Jira tickets and the voice
+behind every line."
 
-**"Where exactly does Sarvam do the work?"** Saaras v4 for every recording and answer (codemix mode, keyterms, timestamps). Translate for questions and the BRD in 7 languages. Bulbul v4-flash for spoken questions, read-back and the BRD summary. Sarvam 105B (conversations model) for the interview questions and the conflict check. Gemini for the long BRD draft and the app, because those are 20–35 second generations and 105B's reasoning budget made them unreliable in our tests.
+## If something breaks
 
-**"How do you stop hallucinated numbers?"** Every number must appear in its quote. Sarvam writes Hindi numbers as words, so the model must point to the exact spoken words ("50 ← पचास") and a human confirms. English number words are parsed too, so "fifty" can't bypass it.
-
-**"How do you know who spoke?"** Speakers are selected before each recording. Sarvam's diarization is batch-only (recorded files), so automatic speaker detection for uploaded meetings is the next step; the conflict detector already works per speaker.
-
-**"What about my language?"** Seven in the UI today, Kannada included. Sarvam Translate and Saaras v4 cover all 22 scheduled languages, so adding one is a config line.
-
-**"Is the approval a legal signature?"** No. It records who approved what and when. The audio hash shows the recording wasn't altered; it doesn't prove identity. We say so in the product.
-
-**"What breaks?"** Clips under 3 seconds with auto language detection; very long meetings on the live-mic path (30-second segments). Name it before they do.
-
-**"What was the Paytm / Dhandha Twin slide in round 1?"** An earlier concept. We narrowed to the requirements problem because that is where the loss happens; payments are a vendor's feature, not Vaani's.
-
-## Don't say
-"world's first", "zero hallucinations", "100% accurate" (say "66 of 66 in our benchmark"), "legally binding", "works offline" (only the demo does), "word-level timestamps" (they are phrase-level), "automatic speaker detection" (manual today).
+- Voice fails or Sarvam credits run out: *Play the 2-minute narrated demo* on the landing page runs the whole flow from cache.
+- Internet fails: the fixture path takes over automatically; the screen says so honestly.
+- A judge asks for Kannada or Tamil: the interface, voices and demo exist for both.

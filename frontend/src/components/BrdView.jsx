@@ -1,4 +1,4 @@
-import { cloneElement, useRef, useState } from "react";
+import { cloneElement, useEffect, useRef, useState } from "react";
 import { api, playClips } from "../api/client.js";
 import { toJiraCsv, toMarkdown, download, fileName } from "../data/export.js";
 import PhoneFrame, { openSandboxed } from "./PhoneFrame.jsx";
@@ -65,31 +65,31 @@ function HearClip({ evidence, start, end }) {
     {open && <SourceAudio evidence={evidence} start={start} end={end} caption=" " />}</span>;
 }
 
-export function VendorPack({ brd, translations, evidence = [] }) {
+export function VendorPack({ brd, translations, evidence = [], t = s => s }) {
   const rules = brd.business_rules || [];
   const verified = rules.filter(r => r.verification?.status === "verified").length;
   const confirm = rules.filter(r => ["needs_confirmation", "unsupported_number"].includes(r.verification?.status)).length;
   const criteria = rules.reduce((n, r) => n + (r.acceptance?.length || 0), 0);
   return <section className="vendor-pack" aria-label="Vendor hand-off">
-    <div className="vendor-head"><div><div className="eyebrow">Vendor hand-off</div><h2>What the IT vendor builds</h2></div>
+    <div className="vendor-head"><div><div className="eyebrow">{t("Vendor hand-off")}</div><h2>{t("What the IT vendor builds")}</h2></div>
       <dl className="vendor-stats">
-        <div><dt>Requirements</dt><dd>{rules.length}</dd></div>
-        <div><dt>Verified against speech</dt><dd>{verified}</dd></div>
-        <div><dt>Numbers to confirm</dt><dd>{confirm}</dd></div>
-        <div><dt>Acceptance criteria</dt><dd>{criteria}</dd></div>
-        <div><dt>Open questions</dt><dd>{brd.open_questions?.length || 0}</dd></div>
+        <div><dt>{t("Requirements")}</dt><dd>{rules.length}</dd></div>
+        <div><dt>{t("Verified against speech")}</dt><dd>{verified}</dd></div>
+        <div><dt>{t("Numbers to confirm")}</dt><dd>{confirm}</dd></div>
+        <div><dt>{t("Acceptance criteria")}</dt><dd>{criteria}</dd></div>
+        <div><dt>{t("Open questions")}</dt><dd>{brd.open_questions?.length || 0}</dd></div>
       </dl></div>
     <div className="tbl"><table className="vendor-table">
-      <thead><tr><th>ID</th><th>Requirement</th><th>Said by</th><th>Acceptance</th><th>Status</th><th>Evidence</th></tr></thead>
+      <thead><tr><th>ID</th><th>{t("Requirement")}</th><th>{t("Said by")}</th><th>{t("Acceptance")}</th><th>{t("Status")}</th><th>{t("Evidence")}</th></tr></thead>
       <tbody>{rules.map(r => <tr key={r.id}>
         <td className="n"><span className="fr-id">{r.req_id}</span></td>
         <td><b>{r.title}</b><div className="logic">{r.rule}</div>{translations?.[r.rule] && <span className="tr">{translations[r.rule]}</span>}</td>
         <td>{r.speaker ? <span className="speaker-chip">{r.speaker}</span> : <span className="source-note">—</span>}</td>
         <td>{r.acceptance?.length ? <ol className="vendor-ac">{r.acceptance.map((a, i) => <li key={i}>{a}</li>)}</ol> : <span className="source-note">To be written</span>}</td>
-        <td><span className={"vp-status vp-" + (r.verification?.status || "none")}>{r.verification?.status === "verified" ? "Verified" : r.verification?.status === "needs_confirmation" ? "Confirm number" : r.verification?.status === "unsupported_number" ? "Unspoken number" : r.verification?.status === "rejected" ? "Quote mismatch" : "—"}</span></td>
+        <td><span className={"vp-status vp-" + (r.verification?.status || "none")}>{r.verification?.status === "verified" ? t("Verified") : r.verification?.status === "needs_confirmation" ? t("Confirm number") : r.verification?.status === "unsupported_number" ? t("Unspoken number") : r.verification?.status === "rejected" ? t("Quote mismatch") : "—"}</span></td>
         <td className="n">{r.start != null && evidence.find(e => e.id === r.evidence_id) ? <HearClip evidence={evidence.find(e => e.id === r.evidence_id)} start={r.start} end={r.end} /> : <span className="source-note">{r.source_quote ? "quote only" : "—"}</span>}</td>
       </tr>)}</tbody></table></div>
-    {!!brd.open_questions?.length && <div className="vendor-open"><b>Open questions for the client</b><ol>{brd.open_questions.map((q, i) => <li key={i}>{q}</li>)}</ol></div>}
+    {!!brd.open_questions?.length && <div className="vendor-open"><b>{t("Open questions for the client")}</b><ol>{brd.open_questions.map((q, i) => <li key={i}>{q}</li>)}</ol></div>}
   </section>;
 }
 
@@ -101,7 +101,8 @@ function summaryText(brd) {
 }
 
 export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, langs, lang, reset, widgets, onWidgets, metadata, share, shareUrl, targetDevice,
-  ai, onRedraft, onRegenerateApp, serverBody, sarvamVoice, onSarvamUsed, completeness, a11y, docLang, translations, onLanguage, langBusy, emailEnabled }) {
+  ai, onRedraft, onRegenerateApp, serverBody, sarvamVoice, onSarvamUsed, completeness, a11y, docLang, translations, onLanguage, langBusy, emailEnabled, t = s => s,
+  deadlines, deadlinesPending, email = "", emailNote, googleEnabled }) {
   const [listenLang, setListenLang] = useState(lang);
   const [status, setStatus] = useState(""), [busy, setBusy] = useState("");
   const stop = useRef(null);
@@ -141,7 +142,30 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
     setBusy("xlsx"); setStatus("");
     try { download(fileName(brd) + "-traceability.xlsx", await api.xlsx(serverBody)); } catch (e) { setStatus(e.message); } finally { setBusy(""); }
   };
-  const [emailTo, setEmailTo] = useState("");
+  const [emailTo, setEmailTo] = useState(email || "");
+  // Google: connect once (OAuth in a popup), then push the Doc and the events.
+  const [google, setGoogle] = useState({ connected: false, busy: false, result: null, error: "" });
+  const [gEmail, setGEmail] = useState(email || "");
+  const checkGoogle = async addr => { try { const st = await api.googleStatus(addr); setGoogle(g => ({ ...g, connected: !!st.connected })); } catch { /* not configured */ } };
+  useEffect(() => { if (googleEnabled && gEmail) checkGoogle(gEmail); }, [googleEnabled, gEmail]);
+  useEffect(() => {
+    const onMsg = e => { if (e.data?.vaani_google) { setGEmail(e.data.vaani_google); setGoogle(g => ({ ...g, connected: true })); } };
+    window.addEventListener("message", onMsg); return () => window.removeEventListener("message", onMsg);
+  }, []);
+  const connectGoogle = async () => {
+    try { const { url } = await api.googleStart(gEmail); window.open(url, "vaani-google", "width=520,height=680"); }
+    catch (e) { setGoogle(g => ({ ...g, error: e.message })); }
+  };
+  const pushGoogle = async () => {
+    setGoogle(g => ({ ...g, busy: true, error: "", result: null }));
+    try { const result = await api.googlePush({ ...serverBody, email: gEmail, deadlines: deadlines?.deadlines || [] }); setGoogle(g => ({ ...g, busy: false, result })); }
+    catch (e) { setGoogle(g => ({ ...g, busy: false, error: e.message })); }
+  };
+  const downloadIcs = async () => {
+    setBusy("ics"); setStatus("");
+    try { download(fileName(brd) + "-deadlines.ics", await api.ics({ deadlines: deadlines.deadlines, project: brd.project_name }), "text/calendar"); }
+    catch (e) { setStatus(e.message); } finally { setBusy(""); }
+  };
   const sendEmail = async () => {
     setBusy("email"); setStatus("");
     try {
@@ -151,27 +175,53 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
   };
 
   return <div className="brd-final">
-    <header className="brd-header"><div><div className="eyebrow">Business Requirements Document + generated web app</div><h1>{brd.project_name}</h1>
-      <p>{brd.business_rules.length} approved requirements · BRD completeness {completeness ?? "n/a"}%{brd.ai_brain ? " · drafted by " + brd.ai_brain : ""}</p></div>
-      <button className="btn btn-ghost" onClick={reset}>Start over</button></header>
+    <header className="brd-header"><div><div className="eyebrow">{t("Business Requirements Document + generated web app")}</div><h1>{brd.project_name}</h1>
+      <p>{brd.business_rules.length} {t("approved requirements")} · {t("BRD completeness")} {completeness ?? "n/a"}%{brd.ai_brain ? " · " + t("drafted by") + " " + brd.ai_brain : ""}</p></div>
+      <button className="btn btn-ghost" onClick={reset}>{t("Start over")}</button></header>
 
-    <VendorPack brd={brd} translations={translations} evidence={evidence} />
+    <VendorPack brd={brd} translations={translations} evidence={evidence} t={t} />
 
     <section className="download-bar card" aria-label="Download BRD">
-      <div><h2>⬇ Download BRD</h2><p className="source-note">{docLang === "english" ? "English." : `English with the ${docLabel} translation under each line (PDF, Word, Markdown).`} Jira CSV is always English, for the vendor.</p></div>
+      <div><h2>⬇ {t("Download BRD")}</h2><p className="source-note">{docLang === "english" ? "English." : `English with the ${docLabel} translation under each line (PDF, Word, Markdown).`} Jira CSV is always English, for the vendor.</p></div>
       <div className="brd-actions">
         <button className="btn btn-pdf" disabled={busy === "pdf"} onClick={pdf}>{busy === "pdf" ? "Preparing…" : "PDF"}</button>
-        <button className="btn btn-primary" disabled={busy === "docx"} onClick={word}>{busy === "docx" ? "Preparing…" : "Word (.docx)"}</button>
+        <button className="btn btn-primary" disabled={busy === "docx"} onClick={word}>{busy === "docx" ? t("Preparing…") : "Word (.docx)"}</button>
         <button className="btn btn-ghost" onClick={() => download(fileName(brd) + (docLang === "english" ? "" : "-" + docLang) + ".md", toMarkdown(brd, translations), "text/markdown;charset=utf-8")}>Markdown</button>
         <button className="btn btn-ghost" onClick={() => download(fileName(brd) + "-jira.csv", "\ufeff" + toJiraCsv(brd), "text/csv;charset=utf-8")}>Jira CSV</button>
         <button className="btn btn-ghost" disabled={busy === "xlsx"} onClick={excel}>{busy === "xlsx" ? "Preparing…" : "Excel RTM"}</button>
-        <button className="btn btn-ghost" onClick={() => window.print()} title="Browser print dialog">Print</button>
+        <button className="btn btn-ghost" onClick={() => window.print()} title="Browser print dialog">{t("Print")}</button>
       </div>
       {emailEnabled && <form className="email-form" onSubmit={e => { e.preventDefault(); sendEmail(); }}>
         <label htmlFor="email-to">Email the pack (PDF, Word, Excel)</label>
         <div className="email-row"><input id="email-to" value={emailTo} placeholder="vendor@example.com, owner@example.com" onChange={e => setEmailTo(e.target.value)} />
           <button className="btn btn-primary" disabled={busy === "email" || !emailTo.trim()}>{busy === "email" ? "Sending…" : "Send"}</button></div>
       </form>}
+    </section>
+
+    <section className="card deadlines" aria-label="Deadlines">
+      <div className="deadlines-head"><div><div className="eyebrow">{t("Deadlines and milestones")}</div><h2>📅 {t("What was promised, by when")}</h2>
+        <p className="source-note">{t("Inferred from the words, each with its quote. A date nothing supports is marked to confirm, never invented.")}</p></div>
+        {deadlines?.deadlines?.length > 0 && <button className="btn btn-ghost" disabled={busy === "ics"} onClick={downloadIcs}>⬇ {busy === "ics" ? t("Preparing…") : t("Calendar file (.ics)")}</button>}</div>
+      {deadlinesPending && !deadlines && <p className="source-note">⏳ {t("Reading the dates out of what was said…")}</p>}
+      {deadlines?.error && <p className="notice">{deadlines.error}</p>}
+      {deadlines && !deadlines.error && !deadlines.deadlines?.length && <p className="source-note">{t("No dated commitment was spoken. Ask the owner for a launch date and it will appear here.")}</p>}
+      {deadlines?.deadlines?.length > 0 && <ul className="deadline-list">{deadlines.deadlines.map(d => <li key={d.id} className={"dl-" + d.status}>
+        <span className="dl-date">{d.date}</span>
+        <span className="dl-body"><b>{d.title}</b> <small className="dl-kind">{t(d.kind)}</small>{d.status === "confirm" && <small className="dl-confirm"> · {t("date to confirm")}</small>}
+          {d.source_quote ? <q>{d.source_quote}</q> : null}{d.note && <span className="source-note dl-note">{d.note}</span>}</span>
+        <a className="btn btn-ghost dl-add" href={d.google_link} target="_blank" rel="noreferrer">＋ {t("Add to Google Calendar")}</a>
+      </li>)}</ul>}
+      <div className="google-row">
+        {googleEnabled ? <>
+          <label>{t("Google account")}<input type="email" value={gEmail} placeholder="owner@gmail.com" onChange={e => setGEmail(e.target.value)} /></label>
+          {!google.connected && <button className="btn btn-ghost" disabled={!gEmail} onClick={connectGoogle}>{t("Connect Google")}</button>}
+          <button className="btn btn-primary" disabled={!google.connected || google.busy} onClick={pushGoogle}>{google.busy ? t("Saving…") : t("Save BRD to Google Drive + deadlines to Google Calendar")}</button>
+          {google.result?.doc_url && <a className="btn btn-ghost" href={google.result.doc_url} target="_blank" rel="noreferrer">{t("Open the Google Doc ↗")}</a>}
+          {google.result && <span className="source-note">{google.result.events.filter(e => e.link).length} {t("events created")}</span>}
+          {google.error && <span className="source-note">{google.error}</span>}
+        </> : <span className="source-note">{t("Google Drive and Calendar push: add a free Google OAuth client to backend/.env (GOOGLE_CLIENT_ID). Until then: the .ics file, the links above, and the pack by email.")}</span>}
+        {emailNote && <span className="source-note">✉ {emailNote}</span>}
+      </div>
     </section>
 
     <div className={"ai-bar" + (ai.error ? " ai-error" : "")} role="status">
@@ -183,11 +233,11 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
     </div>
 
     <div className="listen-bar card">
-      <label>Language<select value={listenLang} onChange={e => setListenLang(e.target.value)}>{langs.map(([c, label]) => <option key={c} value={c}>{label}</option>)}</select></label>
+      <label>{t("Language")}<select value={listenLang} onChange={e => setListenLang(e.target.value)}>{langs.map(([c, label]) => <option key={c} value={c}>{label}</option>)}</select></label>
       <button className="btn btn-primary" disabled={(!sarvamVoice && listenLang !== "english") || listenLang === docLang || langBusy} onClick={switchLanguage}>
-        🌐 {langBusy ? "Translating…" : listenLang === docLang ? `BRD + app in ${docLabel}` : `Switch BRD + app to ${listenLabel}`}</button>
-      {a11y !== "deaf" && <button className="btn btn-ghost" disabled={!sarvamVoice || busy === "listen"} onClick={listen}>🔊 {busy === "listen" ? "Playing…" : "Listen to BRD summary"}</button>}
-      {busy === "listen" && <button className="btn btn-ghost" onClick={() => { stop.current?.(); setBusy(""); }}>Stop</button>}
+        🌐 {langBusy ? t("Translating…") : listenLang === docLang ? `${t("BRD + app in")} ${docLabel}` : `${t("Switch BRD + app to")} ${listenLabel}`}</button>
+      {a11y !== "deaf" && <button className="btn btn-ghost" disabled={!sarvamVoice || busy === "listen"} onClick={listen}>🔊 {busy === "listen" ? t("Playing…") : t("Listen to BRD summary")}</button>}
+      {busy === "listen" && <button className="btn btn-ghost" onClick={() => { stop.current?.(); setBusy(""); }}>{t("Stop")}</button>}
       {!sarvamVoice && <span className="source-note">Sarvam is not configured, so voice and translation are unavailable.</span>}
       {status && <span className="source-note">{status}</span>}
     </div>
@@ -195,8 +245,8 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
     <div className="brd-dual">
       <div className="brd-doc-column"><Document brd={brd} evidence={evidence} translations={translations} /></div>
       <aside className="brd-app-col">
-        <div className="brd-app-header-row"><h2>💻 Web app generated from this BRD</h2>
-          <button className="btn-app-tab" onClick={() => openSandboxed(appHtml)}>Open full page ↗</button></div>
+        <div className="brd-app-header-row"><h2>💻 {t("Web app generated from this BRD")}</h2>
+          <button className="btn-app-tab" onClick={() => openSandboxed(appHtml)}>{t("Open full page ↗")}</button></div>
         {appNote && <p className="notice">{appNote}</p>}
         <button className="btn-link" disabled={!!ai.busy} onClick={onRegenerateApp}>↻ Regenerate app</button>
         <PhoneFrame screens={[]} appHtml={appHtml} appLabel={appLabel} evidence={evidence} widgets={widgets} onWidgets={onWidgets} metadata={{ ...metadata, mode: brd.mode }} shareUrl={shareUrl} previewOnly={true} targetDevice={targetDevice} />

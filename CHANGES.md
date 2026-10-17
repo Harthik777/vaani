@@ -1,5 +1,40 @@
 # Vaani change log
 
+## 18 Oct, 01:00: the judges' scores (innovation 4, creativity 3) and what changed because of them
+
+The mentor round scored innovation 4/10 and creativity 3/10: judges saw "voice to document" and nothing they had not seen.
+Four additions, all demoed in under ten seconds each:
+
+1. **Executable requirements.** On Review, the owner describes a situation ("today stock is 70 kg, festival season, a 25,000
+   order came in") and VAANI shows which requirements fire and why (`POST /api/agent/scenario`, fast model, every rule
+   answered, no invented ids). The 50 kg versus 100 kg disagreement now has a visible consequence before anything is built.
+2. **The agent reconciles a conflict.** Instead of only "keep one", *Ask the agent to reconcile both* proposes one rule with a
+   default and an exception taken from the reason in the exact words ("alert at 50 kg, unless festival season, then 100 kg"),
+   plus the question to ask the owner (`POST /api/agent/resolve`, main model). The verifier still decides: the backing quote
+   is chosen as the spoken line that carries every number the rule uses, so the proposal is shown verified, not trusted.
+3. **The interface in the owner's language.** 178 interface strings in Hindi, Kannada and Tamil (Sarvam Translate once, cached
+   in `shared/ui-strings.json`; `backend/tools/translate_ui.py`). `?ui=english` pins English; the browser tests use it.
+   Telugu, Marathi and Bengali interfaces are pending: the Sarvam credits ran out during the run.
+4. **One obvious path per screen.** Speak: mic or the meeting demo, then Next; uploads, photos, sample text and manual entry are
+   under "More ways to add words". Review: the owner view and *Approve N verified* first; vendor editing, one-by-one review,
+   adding a requirement and *Show the verifier catching a lie* (a planted 48-hour deadline blocked in red) are under "More".
+
+5. **Deadlines into Google Calendar, the BRD into Google Drive, an email at the start.** The landing page asks for an email
+   (optional). When the BRD is approved, `POST /api/brd/deadlines` reads every dated commitment out of the words (Diwali, "in
+   2 months", "every evening") with its quote; a date nothing supports is marked *to confirm*. Each entry has a one-click
+   *Add to Google Calendar* link (no credentials) and the set downloads as an .ics file; the pack (PDF, Word, Excel) is
+   emailed once to the address given. With a free Google OAuth client in `backend/.env`, *Connect Google* then *Save BRD to
+   Google Drive + deadlines to Google Calendar* creates the Google Doc and the events through the APIs
+   (`services/google_sync.py`, `routes/integrations.py`). 94 backend tests.
+
+Also: timing badges under the step bar (agent 2.8 s, extraction 2.8 s, BRD draft 4.3 s, app 4.8 s from the cache-warm run),
+BENCHMARK.md regenerated on the merged code (66/66, 7/7), PITCH.md rewritten story-first with the three rehearsed answers,
+docs/RECORD-THESE-LINES.md for a real two-voice recording, the deck rebuilt from tonight's screenshots. 92 backend tests,
+13 browser flows.
+
+**Credits:** the Sarvam key returned 402 (no credits) at 23:40. Rehearsed paths run from the cache and Gemini; live
+microphone speech needs a topped-up or new key before the pitch.
+
 ## 17 Oct, 23:00: what a judge sees is live, audible and shareable
 
 A cold walk through the app as a judge found three things that undercut the pitch even though the code behind them worked:

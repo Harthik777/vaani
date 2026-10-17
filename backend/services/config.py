@@ -82,6 +82,10 @@ if os.getenv("LLM_PROVIDER", "").strip().lower() == "sarvam" and SARVAM_API_KEY:
 # falling back to the main LLM on any failure. A circuit breaker (services.sarvam) stops waiting on it after
 # two consecutive failures, so a bad key or outage costs at most two short timeouts.
 AGENT_LLM = os.getenv("AGENT_LLM", "sarvam").strip().lower()
+# Google Drive (BRD as a Google Doc) and Google Calendar (deadlines): a free OAuth client from Google Cloud Console.
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+GOOGLE_REDIRECT = os.getenv("GOOGLE_REDIRECT", "http://localhost:8000/api/google/callback").strip()
 SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
 SMTP_PORT = os.getenv("SMTP_PORT", "587").strip()
 SMTP_USER = os.getenv("SMTP_USER", "").strip()

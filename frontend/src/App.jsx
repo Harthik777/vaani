@@ -18,6 +18,7 @@ import Interview from "./components/Interview.jsx";
 import { ConflictCard, VerifierSummary, VerifyBadge } from "./components/Verifier.jsx";
 import useRecorder from "./components/useRecorder.js";
 import HelpBot from "./components/HelpBot.jsx";
+import { translator } from "./i18n.js";
 
 const PHASES = ["landing", "record", "interview", "extract", "signoff", "brd"];
 const PHASE_LABEL = { landing: "Start", record: "Speak", interview: "Agent questions", extract: "Review", signoff: "Approve", brd: "BRD + App" };
@@ -53,10 +54,11 @@ const groundedTo = (p, tx) => ({
   answers: p.answers.filter(a => (a.answer || "").trim() && tx.includes(a.answer.trim())),
   evidence: p.evidence.filter(e => !e.transcript || tx.includes(e.transcript.trim())),
   skipped: [], gaps: null, conflicts: [], rejected: [], draftAnswer: "", queue: [],
-  metadata: Object.fromEntries(Object.entries(p.metadata || {}).filter(([, v]) => !isDemoValue(v))),
+  metadata: Object.fromEntries(Object.entries(p.metadata || {}).filter(([k, v]) => k === "email" || !isDemoValue(v))),
   domain: isDemoValue(p.domain) || p.demo ? MODE_DOMAIN[p.mode] : (p.domain || MODE_DOMAIN[p.mode]),
 });
-const cleanMetadata = p => Object.fromEntries(Object.entries(p.metadata || {}).filter(([, v]) => !isDemoValue(v)));
+const cleanMetadata = p => Object.fromEntries(Object.entries(p.metadata || {}).filter(([k, v]) => k === "email" || !isDemoValue(v)));
+const secs = t0 => Math.round((performance.now() - t0) / 100) / 10;
 const lineParts = line => { const m = line.match(/^\[([^\]]{1,60})\]\s*([\s\S]*)$/); return m ? { speaker: m[1], text: m[2] } : { speaker: null, text: line }; };
 // Saaras v4 keyterms: names, products and units already known in this session bias speech recognition.
 function keytermsFor(s) {
@@ -160,6 +162,7 @@ function Workspace() {
   }, [locked]);
 
   const langLabel = LANGS.find(([c]) => c === s.lang)?.[1];
+  const t = translator(s.lang);  // the interface speaks the owner's language (Sarvam Translate, cached in shared/ui-strings.json)
   const index = PHASES.indexOf(s.phase);
   const approved = s.approved;
   const sarvamVoice = !!health?.live_stt;
@@ -189,9 +192,10 @@ function Workspace() {
     setError("");
     const version = ++gapVersion.current;
     try {
+      const t0 = performance.now();
       const gaps = await api.gaps({ transcript: tx, mode: st.mode, lang: st.lang, answered, demo: st.demo });
       if (active.current && version === gapVersion.current)
-        set(p => p.tx !== tx ? p : ({ ...p, gaps: applyAnswered(gaps, p.answers.map(a => a.key)), sarvamUsed: { ...p.sarvamUsed, ...(gaps.translated_with_sarvam ? { translate: true } : {}) } }));
+        set(p => p.tx !== tx ? p : ({ ...p, gaps: applyAnswered(gaps, p.answers.map(a => a.key)), timings: { ...(p.timings || {}), gaps: secs(t0) }, sarvamUsed: { ...p.sarvamUsed, ...(gaps.translated_with_sarvam ? { translate: true } : {}) } }));
     } catch (e) { if (active.current && version === gapVersion.current && !background) setError(e.message); }
     finally { if (active.current && version === gapVersion.current) { setBusy(false); setRechecking(false); } }
   };
@@ -321,16 +325,17 @@ function Workspace() {
 
   // ── Extraction, verification, conflicts ──
   const extract = async () => { const st = stateRef.current;
-    setError(""); setBusy(true); invalidate({ phase: "extract", rules: [], reviewNotes: [], rejected: [], conflicts: [] });
+    setError(""); setBusy(true); invalidate({ phase: "extract", rules: [], reviewNotes: [], rejected: [], conflicts: [], lie: null });
     const version = ++requestVersion.current;
     try {
+      const t0 = performance.now();
       const result = await api.extract(st.tx, st.domain, st.mode, st.demo);
       if (!active.current || version !== requestVersion.current) return;
       const rules = result.rules.map(r => {
         const e = r.source_quote ? st.evidence.find(e => e.transcript?.includes(r.source_quote)) : null;
         return { ...r, quote_note: r.verification?.quote_note || null, speaker: r.speaker || speakerOf(r.source_quote, st.tx) || (e?.speaker ?? null), evidence_id: e?.id || null, ...clipFor(r.source_quote, e) };
       });
-      set(p => p.tx !== st.tx ? p : ({ ...p, rules, reviewNotes: result.review_notes || [], rejected: result.rejected || [], demo: result.demo, extractBrain: result.brain, conflicts: Array.isArray(result.conflicts) ? result.conflicts : [] }));
+      set(p => p.tx !== st.tx ? p : ({ ...p, rules, reviewNotes: result.review_notes || [], rejected: result.rejected || [], demo: result.demo, extractBrain: result.brain, conflicts: Array.isArray(result.conflicts) ? result.conflicts : [], timings: { ...(p.timings || {}), extract: secs(t0) } }));
       if (!Array.isArray(result.conflicts) && new Set(rules.map(r => r.speaker).filter(Boolean)).size >= 2) {
         const found = await api.conflicts({ rules, transcript: st.tx, demo: result.demo }).catch(e => ({ conflicts: [], note: e.message }));
         if (active.current && version === requestVersion.current) patch({ conflicts: found.conflicts || [] });
@@ -339,6 +344,36 @@ function Workspace() {
     finally { if (active.current && version === requestVersion.current) setBusy(false); }
   };
   const updateRules = rules => invalidate({ rules });
+  // Mediation: the agent proposes one reconciled rule (default + exception); the verifier still checks it against the words.
+  const resolveConflict = async c => { const st = stateRef.current;
+    patch({ conflicts: st.conflicts.map(x => x === c ? { ...x, resolving: true, resolveError: "" } : x) });
+    try {
+      const out = await api.resolve({ rules: st.rules, conflict: { rule_ids: c.rule_ids, topic: c.topic, explanation: c.explanation }, transcript: st.tx });
+      set(p => ({ ...p, conflicts: p.conflicts.map(x => x.rule_ids.join() === c.rule_ids.join() ? { ...x, resolving: false, proposal: out.proposal, question: out.question, why: out.why } : x) }));
+    } catch (e) { set(p => ({ ...p, conflicts: p.conflicts.map(x => x.rule_ids.join() === c.rule_ids.join() ? { ...x, resolving: false, resolveError: e.message } : x) })); }
+  };
+  const acceptProposal = (c, proposal) => { const st = stateRef.current;
+    const first = st.rules.findIndex(r => c.rule_ids.includes(r.id));
+    const rules = st.rules.filter(r => !c.rule_ids.includes(r.id));
+    rules.splice(Math.max(0, first), 0, { ...proposal, id: crypto.randomUUID() });
+    invalidate({ rules, conflicts: st.conflicts.filter(x => x !== c) });
+  };
+  // Executable requirements: describe a situation; see which requirements fire before anything is built.
+  const [scenario, setScenario] = useState(""), [scenarioOut, setScenarioOut] = useState(null), [scenarioBusy, setScenarioBusy] = useState(false);
+  const runScenario = async () => { const st = stateRef.current;
+    if (!scenario.trim() || !st.rules.length) return;
+    setScenarioBusy(true); setScenarioOut(null);
+    try { setScenarioOut(await api.scenario({ rules: st.rules, scenario: scenario.trim() })); }
+    catch (e) { setScenarioOut({ error: e.message }); }
+    finally { setScenarioBusy(false); }
+  };
+  // Stage demo: plant a number nobody said into a verified requirement; the verifier blocks it in red at once. Undo restores it.
+  const plantLie = () => {
+    if (s.lie) { invalidate({ rules: s.rules.map(r => r.id === s.lie.id ? { ...r, action: s.lie.action } : r), lie: null }); return; }
+    const r = s.rules.find((r, i) => checks[i]?.status === "verified") || s.rules[0];
+    if (!r) return;
+    invalidate({ rules: s.rules.map(x => x.id === r.id ? { ...x, action: x.action + " within 48 hours" } : x), lie: { id: r.id, action: r.action } });
+  };
   const validateRules = () => {
     const invalid = s.rules.find(r => !r.title.trim() || !r.condition.trim() || !r.action.trim() ||
       (r.source_quote && !s.tx.includes(r.source_quote)) ||
@@ -406,7 +441,8 @@ function Workspace() {
   const runDraft = rules => {
     const key = draftKey(rules), body = bodyFor(rules);
     return track("draft:" + key, async () => {
-      try { const ai = await api.draftBrd(body); if (active.current) patch({ ai: { ...ai, key }, aiError: "", aiErrorKey: null }); }
+      const t0 = performance.now();
+      try { const ai = await api.draftBrd(body); if (active.current) set(p => ({ ...p, ai: { ...ai, key }, aiError: "", aiErrorKey: null, timings: { ...(p.timings || {}), draft: secs(t0) } })); }
       catch (e) { if (active.current) patch({ aiError: e.message, aiErrorKey: key }); }
     });
   };
@@ -416,12 +452,31 @@ function Workspace() {
     const body = bodyFor(rules, { sections: ai?.sections || null, acceptance: ai?.acceptance || [], app_language: language, translations });
     return track("app:" + key, async () => {
       let app;
+      const t0 = performance.now();
       try { app = await api.generateApp(body); }
       catch (e) { app = { html: null, generator: "template", language: "english", note: e.message }; }
-      if (active.current) set(p => ({ ...p, appCache: { ...p.appCache, [key]: app } }));
+      if (active.current) set(p => ({ ...p, appCache: { ...p.appCache, [key]: app }, timings: { ...(p.timings || {}), app: secs(t0) } }));
     });
   };
   const prefetch = rules => { if (rules.length && health?.live_llm) { runDraft(rules); runApp(rules); } };
+  // Deadlines and milestones from what was said, inferred once per exact BRD; the pack is emailed once per exact BRD if an address was given.
+  const deadlineKey = approvedKey + "|dl";
+  const deadlines = s.deadlines?.key === deadlineKey ? s.deadlines : null;
+  useEffect(() => {
+    if (s.phase !== "brd" || !approved.length || !health?.live_llm || deadlines) return;
+    track("deadlines:" + deadlineKey, async () => {
+      try { const out = await api.deadlines(bodyFor(approved)); if (active.current) set(p => ({ ...p, deadlines: { key: deadlineKey, ...out } })); }
+      catch (e) { if (active.current) set(p => ({ ...p, deadlines: { key: deadlineKey, deadlines: [], error: e.message } })); }
+    });
+  }, [s.phase, approvedKey, !!deadlines, health?.live_llm]);
+  useEffect(() => {
+    const to = (s.metadata.email || "").trim();
+    if (s.phase !== "brd" || !approved.length || !health?.email || !to || !aiCurrent || s.emailedKey === approvedKey) return;
+    track("email:" + approvedKey, async () => {
+      try { await api.email({ ...serverBody, to: [to], note: "Sent automatically by VAANI when the BRD was approved." }); if (active.current) set(p => ({ ...p, emailedKey: approvedKey, emailNote: "Emailed to " + to })); }
+      catch (e) { if (active.current) set(p => ({ ...p, emailedKey: approvedKey, emailNote: e.message })); }
+    });
+  }, [s.phase, approvedKey, health?.email, !!aiCurrent, s.metadata.email]);
   useEffect(() => {
     if (s.phase !== "brd" || !approved.length) return;
     if (s.ai?.key !== approvedKey && s.aiErrorKey !== approvedKey) runDraft(approved);
@@ -499,58 +554,55 @@ function Workspace() {
   return <main className="wrap">
     <header className="topbar">
       <div className="brand"><span className="logo">Vaani</span><span className="dev" lang="hi">वाणी</span><span className="tagline">Voice-first BRD agent</span></div>
-      <nav aria-label="Workflow"><ol className="phase-list">{PHASES.map((p, i) => <li key={p} aria-current={s.phase === p ? "step" : undefined} className={i < index ? "done" : ""}><span className="step-n">{i + 1}</span><span className="step-l">{PHASE_LABEL[p]}</span></li>)}</ol></nav>
+      <nav aria-label="Workflow"><ol className="phase-list">{PHASES.map((p, i) => <li key={p} aria-current={s.phase === p ? "step" : undefined} className={i < index ? "done" : ""}><span className="step-n">{i + 1}</span><span className="step-l">{t(PHASE_LABEL[p])}</span></li>)}</ol></nav>
       <span className="lang-pill" title="Language">{langLabel}</span>
     </header>
     <SarvamStrip health={health} used={s.sarvamUsed} />
-    {index > 0 && <button className="btn-back" disabled={locked} onClick={() => { setError(""); patch({ phase: PHASES[index - 1] }); }}>← Back</button>}
+    {index > 0 && <button className="btn-back" disabled={locked} onClick={() => { setError(""); patch({ phase: PHASES[index - 1] }); }}>← {t("Back")}</button>}
+    {!!s.timings && Object.keys(s.timings).length > 0 && <p className="timings" aria-label="Measured times">⏱ {[["gaps", "agent"], ["extract", "extraction"], ["draft", "BRD draft"], ["app", "app"]].filter(([k]) => s.timings[k] != null).map(([k, label]) => t(label) + " " + s.timings[k] + " s").join(" · ")}</p>}
     <div ref={heading} tabIndex="-1" className="phase-focus" aria-label={"Step " + (index + 1)} />
     {error && <div className="notice error" role="alert">{error}</div>}
     {storageError && <div className="notice" role="status">{storageError}</div>}
-    {busy && s.phase !== "interview" && <p role="status" className="agent-thinking">{s.phase === "extract" ? "🧠 Extracting requirements with exact quotes, then checking for stakeholder conflicts…" : "Working…"}</p>}
+    {busy && s.phase !== "interview" && <p role="status" className="agent-thinking">{s.phase === "extract" ? "🧠 " + t("Extracting requirements with exact quotes, then checking for stakeholder conflicts…") : t("Working…")}</p>}
 
     {s.phase === "landing" && <>
       <section className="hero">
-        <div className="eyebrow">Voice-first BRD agent · built on Sarvam</div>
-        <h1 className="big">Speak your requirements.<br /><span className="accent">Get a verified BRD</span> and a working app.</h1>
-        <p className="lead">Explain what you need in your own language. Vaani's agent asks what you forgot, writes a Business Requirements Document where every requirement plays back in the speaker's own voice, and builds a first version of the app.</p>
+        <div className="eyebrow">{t("Voice-first BRD agent · built on Sarvam")}</div>
+        <h1 className="big">{t("Speak your requirements.")}<br /><span className="accent">{t("Get a verified BRD")}</span> {t("and a working app.")}</h1>
+        <p className="lead">{t("Explain what you need in your own language. Vaani's agent asks what you forgot, writes a Business Requirements Document where every requirement plays back in the speaker's own voice, and builds a first version of the app.")}</p>
         <ul className="hero-points">
-          <li><b>Verbatim</b> Every requirement quotes the speaker exactly.</li>
-          <li><b>Verified</b> A number nobody said is blocked, visibly.</li>
-          <li><b>Voices</b> Owner and manager disagreements are caught, with both clips.</li>
+          <li><b>{t("Verbatim")}</b> {t("Every requirement quotes the speaker exactly.")}</li>
+          <li><b>{t("Verified")}</b> {t("A number nobody said is blocked, visibly.")}</li>
+          <li><b>{t("Voices")}</b> {t("Owner and manager disagreements are caught, with both clips.")}</li>
         </ul>
       </section>
       {SHOW_ALL_MODES
         ? <fieldset className="choice-group"><legend>What are you capturing?</legend><div className="intent-grid">{INTENT_MODES.map(m => <button key={m.id} aria-pressed={s.mode === m.id} className={"intent-card" + (s.mode === m.id ? " on" : "")} onClick={() => { if (m.id !== s.mode) set(fresh(m.id, s.lang, s.a11y, s.targetDevice)); }}><span className="intent-icon">{m.icon}</span><span><strong>{m.title}</strong><span className="intent-desc">{m.desc}</span></span></button>)}</div></fieldset>
-        : <p className="landing-mode"><span>Capturing: <b>{INTENT_MODES[0].title}</b></span><a href="?modes=all">Other document types</a></p>}
-      <fieldset className="choice-group"><legend>Language</legend><div className="chips">{LANGS.map(([c, label]) => <button aria-pressed={s.lang === c} key={c} className={"chip" + (s.lang === c ? " on" : "")} onClick={() => { if (c !== s.lang) set(fresh(s.mode, c, s.a11y, s.targetDevice)); }}>{label}</button>)}</div></fieldset>
-      <details className="more-options" open={s.a11y !== "standard" || s.targetDevice === "mobile"}><summary>More options: app type, accessibility</summary>
-        <fieldset className="choice-group"><legend>Device / Output experience</legend><div className="modes">{[["desktop", "💻 Laptop / Desktop Webpage"], ["mobile", "📱 Mobile App"]].map(([c, label]) => <button aria-pressed={s.targetDevice === c} className={"mode" + (s.targetDevice === c ? " on" : "")} key={c} onClick={() => patch({ targetDevice: c })}>{label}</button>)}</div></fieldset>
-        <fieldset className="choice-group"><legend>Accessibility</legend><div className="modes">{[["standard", "Standard"], ["lowVision", "Low vision"], ["deaf", "Deaf / HoH · type input"]].map(([c, label]) => <button aria-pressed={s.a11y === c} className={"mode" + (s.a11y === c ? " on" : "")} key={c} onClick={() => patch({ a11y: c })}>{label}</button>)}</div></fieldset>
+        : <p className="landing-mode"><span>{t("Capturing:")} <b>{INTENT_MODES[0].title}</b></span><a href="?modes=all">{t("Other document types")}</a></p>}
+      <fieldset className="choice-group"><legend>{t("Language")}</legend><div className="chips">{LANGS.map(([c, label]) => <button aria-pressed={s.lang === c} key={c} className={"chip" + (s.lang === c ? " on" : "")} onClick={() => { if (c !== s.lang) set(fresh(s.mode, c, s.a11y, s.targetDevice)); }}>{label}</button>)}</div></fieldset>
+      <details className="more-options" open={s.a11y !== "standard" || s.targetDevice === "mobile"}><summary>{t("More options: app type, accessibility")}</summary>
+        <fieldset className="choice-group"><legend>{t("Device / Output experience")}</legend><div className="modes">{[["desktop", "💻 Laptop / Desktop Webpage"], ["mobile", "📱 Mobile App"]].map(([c, label]) => <button aria-pressed={s.targetDevice === c} className={"mode" + (s.targetDevice === c ? " on" : "")} key={c} onClick={() => patch({ targetDevice: c })}>{label}</button>)}</div></fieldset>
+        <fieldset className="choice-group"><legend>{t("Accessibility")}</legend><div className="modes">{[["standard", "Standard"], ["lowVision", "Low vision"], ["deaf", "Deaf / HoH · type input"]].map(([c, label]) => <button aria-pressed={s.a11y === c} className={"mode" + (s.a11y === c ? " on" : "")} key={c} onClick={() => patch({ a11y: c })}>{label}</button>)}</div></fieldset>
       </details>
-      <button className="btn btn-primary btn-full" onClick={() => patch({ phase: "record" })}>Start capturing →</button>
-      {s.mode === "business" && MEETING.transcript[s.lang] && <button className="btn btn-ghost btn-full demo-play" onClick={playDemo}>▶ Play the 2-minute narrated demo</button>}
+      <label className="email-start">{t("Email for the finished BRD (optional)")}
+        <input type="email" value={s.metadata.email || ""} placeholder="owner@gmail.com" onChange={e => patch({ metadata: { ...s.metadata, email: e.target.value } })} />
+        <span className="source-note">{t("When the BRD is ready it is emailed as PDF, Word and Excel, with the deadlines as a calendar file. With a Google account it can also land in Drive as a Google Doc, and the deadlines in Google Calendar.")}</span></label>
+      <button className="btn btn-primary btn-full" onClick={() => patch({ phase: "record" })}>{t("Start capturing →")}</button>
+      {s.mode === "business" && MEETING.transcript[s.lang] && <button className="btn btn-ghost btn-full demo-play" onClick={playDemo}>▶ {t("Play the 2-minute narrated demo")}</button>}
     </>}
 
     {s.phase === "record" && <>
-      <h1>Speak in {langLabel}</h1>
-      <p className="lead">Describe the app or process you need, in your own words. If several people talk, pick who is speaking first, so every requirement carries a name and a voice.</p>
+      <h1>{t("Speak in")} {langLabel}</h1>
+      <p className="lead">{t("Describe the app or process you need, in your own words. If several people talk, pick who is speaking first, so every requirement carries a name and a voice.")}</p>
       <section className="card speak-stage" aria-label="Recording">
-        <fieldset className="choice-group speakers"><legend>Who is speaking?</legend><div className="chips">
+        <fieldset className="choice-group speakers"><legend>{t("Who is speaking?")}</legend><div className="chips">
           {s.speakers.map(name => <button key={name} aria-pressed={s.speaker === name} className={"chip" + (s.speaker === name ? " on" : "")} disabled={recorder.recording} onClick={() => patch({ speaker: name })}>{name}</button>)}
-          <form className="add-speaker" onSubmit={e => { e.preventDefault(); addSpeaker(e.currentTarget.speaker.value); e.currentTarget.reset(); }}><input name="speaker" aria-label="Add speaker" placeholder="Add speaker (e.g. Manager)" /><button className="btn btn-ghost">Add</button></form>
+          <form className="add-speaker" onSubmit={e => { e.preventDefault(); addSpeaker(e.currentTarget.speaker.value); e.currentTarget.reset(); }}><input name="speaker" aria-label="Add speaker" placeholder={t("Add speaker (e.g. Manager)")} /><button className="btn btn-ghost">{t("Add")}</button></form>
         </div></fieldset>
-        <div className="import-row">
-          <label className={"btn btn-ghost import-btn" + (locked || uploading ? " disabled" : "")}>📼 {s.evidence.some(e => e.uploaded) ? "Add another recording" : "Upload a recorded meeting"}
-            <input type="file" accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.webm" disabled={locked || !!uploading} onChange={e => { importMeeting(e.target.files?.[0]); e.target.value = ""; }} /></label>
-          <label className={"btn btn-ghost import-btn" + (locked || uploading ? " disabled" : "")}>📝 Photo or PDF of notes
-            <input type="file" accept="image/*,application/pdf" disabled={locked || !!uploading} onChange={e => { importNotes(e.target.files?.[0]); e.target.value = ""; }} /></label>
-          <span className="import-hint">Sarvam separates the speakers in a recording and reads handwritten notes.</span>
-        </div>
         {uploading && <p role="status" className="agent-thinking">⏳ {uploading}</p>}
-        {romanLines && !uploading && <p className="rename-row"><span>Typed in Roman script?</span><button className="btn btn-ghost" disabled={locked} onClick={toNativeScript}>Convert to {langLabel} script (Sarvam)</button></p>}
+        {romanLines && !uploading && <p className="rename-row"><span>{t("Typed in Roman script?")}</span><button className="btn btn-ghost" disabled={locked} onClick={toNativeScript}>{t("Convert to native script (Sarvam)")}</button></p>}
         {s.evidence.some(e => e.uploaded) && <div className="rename-row">
-          <span>Voices named in the order they were heard. Wrong? Rename:</span>
+          <span>{t("Voices named in the order they were heard. Wrong? Rename:")}</span>
           {s.speakers.map(n => <form key={n} className="add-speaker" onSubmit={e => { e.preventDefault(); renameSpeaker(n, e.currentTarget.name_input.value); e.currentTarget.reset(); }}>
             <input name="name_input" aria-label={"Rename " + n} placeholder={n + " → …"} /><button className="btn btn-ghost">Rename</button></form>)}
         </div>}
@@ -560,8 +612,8 @@ function Workspace() {
             onClick={recorder.recording ? recorder.stop : () => { replaceTranscript(s.demo ? "" : s.tx); setError(""); recorder.start(); }}>
             <span aria-hidden="true">{recorder.recording ? "■" : "🎙"}</span></button>
           <div className="mic-status"><Wave active={recorder.recording} />
-            <p role="status">{recorder.recording ? `Listening to ${s.speaker}… tap the button to stop` : recorder.processing ? "" : `Tap the microphone and speak as ${s.speaker}`}{recorder.processing ? "Sarvam Saaras is transcribing " + recorder.processing + " segment(s)…" : ""}</p>
-            <p className="mic-hint">Numbers, names and exceptions are kept exactly as spoken. Every segment is hashed and kept as evidence.</p></div>
+            <p role="status">{recorder.recording ? `${t("Listening to")} ${s.speaker}… ${t("tap the button to stop")}` : recorder.processing ? "" : `${t("Tap the microphone and speak as")} ${s.speaker}`}{recorder.processing ? t("Sarvam Saaras is transcribing…") : ""}</p>
+            <p className="mic-hint">{t("Numbers, names and exceptions are kept exactly as spoken. Every segment is hashed and kept as evidence.")}</p></div>
         </div>}
         {s.talk && Object.keys(s.talk).length > 1 && <div className="talk-bar" aria-label="Talk time by speaker">
           {(() => { const total = Object.values(s.talk).reduce((a, b) => a + b, 0) || 1; return Object.entries(s.talk).map(([name, secs], i) => <span key={name} className={"talk-seg spk-" + (i % 4)} style={{ width: (100 * secs / total) + "%" }} title={`${name}: ${Math.round(secs)} s`}>{name} {Math.round(100 * secs / total)}%</span>); })()}
@@ -570,39 +622,45 @@ function Workspace() {
         {transcriptLines.length > 0 && <ol className="feed" aria-label="What was said">{transcriptLines.map((l, i) => <li key={i} className={"feed-line" + (l.speaker ? " spk-" + (Math.max(0, s.speakers.indexOf(l.speaker)) % 4) : "")}>
           {l.speaker && <span className="speaker-chip">{l.speaker}</span>}<span lang={s.lang === "english" ? "en" : undefined}>{l.text}</span></li>)}</ol>}
         <details className="tx-edit" open={txOpen} onToggle={e => setTxOpen(e.currentTarget.open)}>
-          <summary>{s.tx.trim() ? "Edit the words" : "Type or paste the words instead"}</summary>
-          <label htmlFor="transcript-input">Transcript</label><textarea id="transcript-input" className="transcript" value={s.tx} disabled={recorder.requesting || recorder.recording || recorder.processing > 0 || !!uploading} placeholder="Type or paste the speaker's words, or paste a WhatsApp chat export. Start a line with [Name] to mark who said it." onChange={e => replaceTranscript(e.target.value)} />
+          <summary>{s.tx.trim() ? t("Edit the words") : t("Type or paste the words instead")}</summary>
+          <label htmlFor="transcript-input">{t("Transcript")}</label><textarea id="transcript-input" className="transcript" value={s.tx} disabled={recorder.requesting || recorder.recording || recorder.processing > 0 || !!uploading} placeholder={t("Type or paste the speaker's words, or paste a WhatsApp chat export. Start a line with [Name] to mark who said it.")} onChange={e => replaceTranscript(e.target.value)} />
+        </details>
+        <details className="more-ways"><summary>{t("More ways to add words: a recording, a photo of notes, sample text")}</summary>
+          <div className="import-row">
+            <label className={"btn btn-ghost import-btn" + (locked || uploading ? " disabled" : "")}>📼 {s.evidence.some(e => e.uploaded) ? t("Add another recording") : t("Upload a recorded meeting")}
+              <input type="file" accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.webm" disabled={locked || !!uploading} onChange={e => { importMeeting(e.target.files?.[0]); e.target.value = ""; }} /></label>
+            <label className={"btn btn-ghost import-btn" + (locked || uploading ? " disabled" : "")}>📝 {t("Photo or PDF of notes")}
+              <input type="file" accept="image/*,application/pdf" disabled={locked || !!uploading} onChange={e => { importNotes(e.target.files?.[0]); e.target.value = ""; }} /></label>
+            <button className="btn btn-ghost" disabled={locked} onClick={() => { setError(""); invalidate({ queue: [], talk: null, tx: api.demoTranscript(s.lang, s.mode), demo: true, rules: [], evidence: [], answers: [], gaps: null, domain: MODE_DOMAIN[s.mode], metadata: { title: "Demo · " + INTENT_MODES.find(m => m.id === s.mode).title, reviewer: "Demo reviewer" } }); }}>{t("Use demo")}</button>
+            <button className="btn btn-ghost" disabled={!s.tx.trim() || locked} onClick={() => patch({ phase: "extract" })}>{t("Enter rules manually")}</button>
+          </div>
+          <span className="import-hint">{t("Sarvam separates the speakers in a recording and reads handwritten notes.")}</span>
         </details>
       </section>
-      <MetadataForm mode={s.mode} metadata={s.metadata} onChange={metadata => invalidate({ metadata })} />
+      <MetadataForm mode={s.mode} metadata={s.metadata} onChange={metadata => invalidate({ metadata })} t={t} />
       <div className="actions">
-        {s.mode === "business" && MEETING.transcript[s.lang] && <button className="btn btn-ghost" disabled={locked} onClick={useMeetingDemo}>Use 2-speaker meeting demo</button>}
-        <button className="btn btn-ghost" disabled={locked} onClick={() => { setError(""); invalidate({ queue: [], talk: null, tx: api.demoTranscript(s.lang, s.mode), demo: true, rules: [], evidence: [], answers: [], gaps: null, domain: MODE_DOMAIN[s.mode], metadata: { title: "Demo · " + INTENT_MODES.find(m => m.id === s.mode).title, reviewer: "Demo reviewer" } }); }}>Use demo</button>
-        <button className="btn btn-primary" disabled={!s.tx.trim() || locked} onClick={startInterview}>Next: agent checks for gaps →</button>
-        <button className="btn btn-ghost" disabled={!s.tx.trim() || locked} onClick={() => patch({ phase: "extract" })}>Enter rules manually</button></div>
-      {s.demo && <p className="demo-banner">Sample transcript selected. No original speaker audio is supplied.</p>}
+        {s.mode === "business" && MEETING.transcript[s.lang] && <button className="btn btn-ghost" disabled={locked} onClick={useMeetingDemo}>{t("Use 2-speaker meeting demo")}</button>}
+        <button className="btn btn-primary" disabled={!s.tx.trim() || locked} onClick={startInterview}>{t("Next: agent checks for gaps →")}</button></div>
+      {s.demo && <p className="demo-banner">{t("Sample transcript selected. The voices are synthesised by Sarvam Bulbul.")}</p>}
       {s.evidence.map(e => <SourceAudio key={e.id} evidence={e} caption={(e.speaker ? e.speaker + " · " : "") + "Original recording · full segment"} />)}
     </>}
 
     {s.phase === "interview" && <>
-      <h1>The agent's questions</h1><p>A complete BRD needs 8 things. The agent shows what was already said (with the exact words) and asks only for what is missing.</p>
-      <Interview gaps={s.gaps} busy={busy} rechecking={rechecking} lang={s.lang} langLabel={langLabel} a11y={s.a11y} sarvamVoice={sarvamVoice} recorder={recorder} demo={s.demo}
+      <h1>{t("The agent's questions")}</h1><p>{t("A complete BRD needs 8 things. The agent shows what was already said (with the exact words) and asks only for what is missing.")}</p>
+      <Interview t={t} gaps={s.gaps} busy={busy} rechecking={rechecking} lang={s.lang} langLabel={langLabel} a11y={s.a11y} sarvamVoice={sarvamVoice} recorder={recorder} demo={s.demo}
         draft={s.draftAnswer} onDraft={draftAnswer => patch({ draftAnswer })} skipped={s.skipped} onSave={saveAnswer}
         onSkip={key => patch({ skipped: [...new Set([...s.skipped, key])], draftAnswer: "" })} onRetry={() => runGaps(s.tx, s.answers.map(a => a.key))}
         onContinue={extract} onVoiceUsed={translated => markUsed({ tts: true, translate: translated })} keyterms={keytermsFor(s)} />
     </>}
 
     {s.phase === "extract" && <>
-      <h1>Review extracted requirements</h1><p>Each requirement must quote the speaker exactly. Fix or remove anything the verifier flags.</p>
-      {visibleConflicts.map(c => <ConflictCard key={c.rule_ids.join("-")} conflict={c} rules={s.rules} evidence={s.evidence}
+      <h1>{t("Review extracted requirements")}</h1><p>{t("Each requirement must quote the speaker exactly. Fix or remove anything the verifier flags.")}</p>
+      {visibleConflicts.map(c => <ConflictCard key={c.rule_ids.join("-")} conflict={c} rules={s.rules} evidence={s.evidence} t={t}
+        onResolve={health?.live_llm ? resolveConflict : null} onAccept={acceptProposal}
         onKeep={(keep, drop) => updateRules(s.rules.filter(r => r.id !== drop))}
         onLater={() => patch({ conflicts: s.conflicts.map(x => x === c ? { ...x, deferred: true } : x) })} />)}
-      <VerifierSummary rules={s.rules} checks={checks} rejected={s.rejected} brain={s.extractBrain} />
-      {!!s.reviewNotes.length && <aside className="notice"><h2>Review notes</h2><ul>{s.reviewNotes.map((n, i) => <li key={i}>{n}</li>)}</ul></aside>}
-      {!!s.rules.length && <div className="view-toggle" role="group" aria-label="Review view">
-        <button className={"chip" + (reviewView === "owner" ? " on" : "")} aria-pressed={reviewView === "owner"} onClick={() => setReviewView("owner")}>Owner view</button>
-        <button className={"chip" + (reviewView === "vendor" ? " on" : "")} aria-pressed={reviewView === "vendor"} onClick={() => setReviewView("vendor")}>Vendor view (edit everything)</button>
-        <span className="source-note">Owner view: read, listen, and tap Fix only where something is wrong.</span></div>}
+      <VerifierSummary rules={s.rules} checks={checks} rejected={s.rejected} brain={s.extractBrain} t={t} />
+      {!!s.reviewNotes.length && <aside className="notice"><h2>{t("Review notes")}</h2><ul>{s.reviewNotes.map((n, i) => <li key={i}>{n}</li>)}</ul></aside>}
       {s.rules.map((r, i) => (reviewView === "vendor" || editing.includes(r.id) || !r.title)
         ? <RuleEditor key={r.id} rule={r} check={checks[i]} evidence={s.evidence} onChange={next => updateRules(s.rules.map(v => v.id === r.id ? next : v))} onDelete={() => updateRules(s.rules.filter(v => v.id !== r.id))} />
         : <article key={r.id} className={"rule owner-card rule-" + (checks[i]?.status || "none")}>
@@ -611,25 +669,45 @@ function Workspace() {
             <VerifyBadge check={checks[i]} />
             {r.source_quote && <blockquote>{r.source_quote}</blockquote>}
             <SourceAudio evidence={s.evidence.find(e => e.id === r.evidence_id)} start={r.start} end={r.end} caption={r.start != null ? `🔊 Original voice · ${r.start}s–${r.end}s` : undefined} />
-            <div className="actions owner-actions"><button className="btn btn-ghost" onClick={() => setEditing(ids => [...ids, r.id])}>Fix this</button><button className="btn btn-ghost" onClick={() => updateRules(s.rules.filter(v => v.id !== r.id))}>Not needed</button></div>
+            <div className="actions owner-actions"><button className="btn btn-ghost" onClick={() => setEditing(ids => [...ids, r.id])}>{t("Fix this")}</button><button className="btn btn-ghost" onClick={() => updateRules(s.rules.filter(v => v.id !== r.id))}>{t("Not needed")}</button></div>
           </article>)}
-      <div className="actions"><button className="btn btn-ghost" disabled={busy} onClick={() => { const id = crypto.randomUUID(); set(p => ({ ...p, editing: [...(p.editing || []), id] })); updateRules([...s.rules, { id, title: "", condition: "", action: "", exception: null, confidence: "MEDIUM", type: "requirement", source_quote: "", numbers: [], speaker: s.speaker, evidence_id: null, start: null, end: null }]); }}>Add requirement</button>
-        <button className="btn btn-primary" disabled={busy || !s.rules.length} onClick={() => startReview(false)}>Review and approve →</button></div>
-      {!!s.rules.length && <section className="card fast-approve" aria-label="Fast approval">
-        <div><h2>Fast approval</h2><p className="source-note">Approve every requirement the verifier fully checked in one step. Only flagged ones (numbers to confirm, vague words, stakeholder conflicts) need individual review. The BRD and the app start building right away.</p></div>
-        <label>Reviewer name<input value={s.metadata.reviewer || ""} onChange={e => patch({ metadata: { ...s.metadata, reviewer: e.target.value }, published: null })} /></label>
-        <button className="btn btn-ok" disabled={busy || !autoOk.length} onClick={() => startReview(true)}>Approve {autoOk.length} verified{s.rules.length - autoOk.length ? ` · review ${s.rules.length - autoOk.length} flagged` : ""} →</button>
+      {!!s.rules.length && health?.live_llm && <section className="card scenario" aria-label="Try a scenario">
+        <div className="eyebrow">{t("Executable requirements")}</div>
+        <h2>{t("Try a scenario before anything is built")}</h2>
+        <p className="source-note">{t("Describe a situation in your own words. VAANI shows which requirements would fire, so a disagreement like 50 kg versus 100 kg has a visible consequence.")}</p>
+        <form className="scenario-row" onSubmit={e => { e.preventDefault(); runScenario(); }}>
+          <input value={scenario} onChange={e => setScenario(e.target.value)} placeholder={t("e.g. Today stock is 70 kg and a 25,000 rupee order just came in")} aria-label="Scenario" />
+          <button className="btn btn-primary" disabled={scenarioBusy || !scenario.trim()}>{scenarioBusy ? t("Checking…") : t("What happens?")}</button>
+        </form>
+        {scenarioOut?.error && <p className="notice">{scenarioOut.error}</p>}
+        {scenarioOut?.results && <ul className="scenario-results">{scenarioOut.results.map(x => { const r = s.rules.find(r => r.id === x.id); return r && <li key={x.id} className={x.fires ? "fires" : "idle"}>
+          <span className="fire">{x.fires ? "⚡ " + t("fires") : "– " + t("does not apply")}</span> <b>{r.title}</b>{r.speaker && <span className="speaker-chip">{r.speaker}</span>}<span className="because">{x.because}</span></li>; })}</ul>}
+        {scenarioOut?.brain && <p className="source-note">{t("Checked by:")} {scenarioOut.brain}</p>}
       </section>}
+      {!!s.rules.length && <section className="card fast-approve" aria-label="Fast approval">
+        <div><h2>{t("Approve")}</h2><p className="source-note">{t("Everything the verifier fully checked is approved in one step. Only flagged requirements (numbers to confirm, vague words, a disagreement) are reviewed one by one. The BRD and the app start building right away.")}</p></div>
+        <label>{t("Reviewer name")}<input value={s.metadata.reviewer || ""} onChange={e => patch({ metadata: { ...s.metadata, reviewer: e.target.value }, published: null })} /></label>
+        <button className="btn btn-ok" disabled={busy || !autoOk.length} onClick={() => startReview(true)}>{t("Approve")} {autoOk.length} {t("verified")}{s.rules.length - autoOk.length ? ` · ${t("review")} ${s.rules.length - autoOk.length} ${t("flagged")}` : ""} →</button>
+      </section>}
+      <details className="review-more" open={!s.rules.length || undefined}><summary>{t("More: review one by one, edit everything, add a requirement, show the verifier catching a lie")}</summary>
+        <div className="view-toggle" role="group" aria-label="Review view">
+          <button className={"chip" + (reviewView === "owner" ? " on" : "")} aria-pressed={reviewView === "owner"} onClick={() => setReviewView("owner")}>{t("Owner view")}</button>
+          <button className={"chip" + (reviewView === "vendor" ? " on" : "")} aria-pressed={reviewView === "vendor"} onClick={() => setReviewView("vendor")}>{t("Vendor view (edit everything)")}</button></div>
+        <div className="actions"><button className="btn btn-ghost" disabled={busy} onClick={() => { const id = crypto.randomUUID(); set(p => ({ ...p, editing: [...(p.editing || []), id] })); updateRules([...s.rules, { id, title: "", condition: "", action: "", exception: null, confidence: "MEDIUM", type: "requirement", source_quote: "", numbers: [], speaker: s.speaker, evidence_id: null, start: null, end: null }]); }}>{t("Add requirement")}</button>
+          <button className="btn btn-ghost" disabled={busy || !s.rules.length} onClick={() => startReview(false)}>{t("Review and approve one by one →")}</button>
+          <button className={"btn " + (s.lie ? "btn-ok" : "btn-ghost")} disabled={busy || !s.rules.length} onClick={plantLie}>{s.lie ? "↶ " + t("Undo the planted lie") : "🧪 " + t("Show the verifier catching a lie")}</button></div>
+        {s.lie && <p className="source-note">{t("A number nobody said (48 hours) was added to a requirement. The verifier blocked it in red without any AI.")}</p>}
+      </details>
     </>}
 
-    {s.phase === "signoff" && reviewRule && <><h1>Source-backed sign-off</h1><p>Requirement {s.soIdx + 1} of {queueIds.length}{approved.length && s.queue.length < s.rules.length ? ` (${s.rules.length - s.queue.length} verified requirements already approved)` : ""}. Listen to the original voice, hear it read back in your language, then decide.</p><progress aria-label="Review progress" max={queueIds.length} value={s.soIdx} />
-      {pending.some(k => k.startsWith("draft:") || k.startsWith("app:")) && <p className="source-note prefetch-note">The BRD and the app are already being prepared in the background.</p>}
-      <label>Reviewer name<input value={s.metadata.reviewer || ""} onChange={e => patch({ metadata: { ...s.metadata, reviewer: e.target.value }, published: null })} /></label>
+    {s.phase === "signoff" && reviewRule && <><h1>{t("Source-backed sign-off")}</h1><p>{t("Requirement")} {s.soIdx + 1} / {queueIds.length}{approved.length && s.queue.length < s.rules.length ? ` (${s.rules.length - s.queue.length} ${t("verified requirements already approved")})` : ""}. {t("Listen to the original voice, hear it read back in your language, then decide.")}</p><progress aria-label="Review progress" max={queueIds.length} value={s.soIdx} />
+      {pending.some(k => k.startsWith("draft:") || k.startsWith("app:")) && <p className="source-note prefetch-note">{t("The BRD and the app are already being prepared in the background.")}</p>}
+      <label>{t("Reviewer name")}<input value={s.metadata.reviewer || ""} onChange={e => patch({ metadata: { ...s.metadata, reviewer: e.target.value }, published: null })} /></label>
       <RuleCard r={reviewRule} check={reviewCheck} lang={s.lang} evidence={s.evidence} a11y={s.a11y} sarvamVoice={sarvamVoice} onSarvamUsed={markUsed} />
-      <p className="source-note">Approval records your review decision and time. It is not an electronic signature or proof of speaker identity. After the last requirement you get the full BRD, with PDF, Word, Markdown and Jira downloads.</p>
-      <div className="actions"><button className="btn btn-ok" onClick={() => decide(true)}>{["needs_confirmation", "unsupported_number"].includes(reviewCheck?.status) ? "Approve: I confirm the numbers" : "Approve requirement"}</button><button className="btn btn-ghost" onClick={() => decide(false)}>Skip requirement</button>
+      <p className="source-note">{t("Approval records your review decision and time. It is not an electronic signature or proof of speaker identity.")}</p>
+      <div className="actions"><button className="btn btn-ok" onClick={() => decide(true)}>{["needs_confirmation", "unsupported_number"].includes(reviewCheck?.status) ? t("Approve: I confirm the numbers") : t("Approve requirement")}</button><button className="btn btn-ghost" onClick={() => decide(false)}>{t("Skip requirement")}</button>
         {s.a11y !== "deaf" && <button className={"btn " + (recorder.recording ? "btn-rec" : "btn-ghost")} disabled={!recorder.recording && recorder.processing > 0} onClick={recorder.recording ? recorder.stop : listenForDecision}>
-          🎙 {recorder.recording ? "Listening… say haan or nahi" : recorder.processing ? "Sarvam is listening…" : "Say haan or nahi to decide"}</button>}
+          🎙 {recorder.recording ? t("Listening… say haan or nahi") : recorder.processing ? t("Sarvam is listening…") : t("Say haan or nahi to decide")}</button>}
         {s.voiceNote && <span role="status" className="source-note">{s.voiceNote}</span>}</div></>}
 
     {s.phase === "brd" && <BrdView brd={brd} appHtml={currentApp?.html || templateApp} appLabel={currentApp ? appLabel : "Requirement simulator (the AI app is still being built)"} appNote={currentApp?.note}
@@ -638,10 +716,11 @@ function Workspace() {
       onRedraft={() => patch({ ai: null, aiError: "", aiErrorKey: null, docLang: "english", translations: null, trCache: {} })}
       onRegenerateApp={() => set(p => { const appCache = { ...p.appCache }; delete appCache[approvedKey + "|" + p.docLang]; return { ...p, appCache }; })}
       docLang={s.docLang} translations={s.translations} onLanguage={switchLanguage} langBusy={langBusy}
-      serverBody={serverBody} sarvamVoice={sarvamVoice} onSarvamUsed={markUsed} completeness={s.gaps?.completeness} a11y={s.a11y} emailEnabled={!!health?.email}
-      shareUrl={s.published?.preview_url || s.published?.url} share={<SharePanel published={s.published} onPublish={publish} busy={busy} mode={s.mode} />} targetDevice={s.targetDevice} />}
+      serverBody={serverBody} sarvamVoice={sarvamVoice} onSarvamUsed={markUsed} completeness={s.gaps?.completeness} a11y={s.a11y} emailEnabled={!!health?.email} t={t}
+      deadlines={deadlines} deadlinesPending={pending.includes("deadlines:" + deadlineKey)} email={s.metadata.email || ""} emailNote={s.emailNote} googleEnabled={!!health?.google}
+      shareUrl={s.published?.preview_url || s.published?.url} share={<SharePanel published={s.published} onPublish={publish} busy={busy} mode={s.mode} title={brd.project_name} t={t} />} targetDevice={s.targetDevice} />}
     {demoCaption && <div className="demo-caption" role="status"><span>{demoCaption}</span>{demoRun.current && <button className="btn-link" onClick={stopDemo}>Stop</button>}</div>}
-    <HelpBot phase={s.phase} lang={s.lang} langLabel={langLabel} sarvamVoice={sarvamVoice} a11y={s.a11y} onSarvamUsed={markUsed}
+    <HelpBot t={t} phase={s.phase} lang={s.lang} langLabel={langLabel} sarvamVoice={sarvamVoice} a11y={s.a11y} onSarvamUsed={markUsed}
       counts={{ requirements: s.rules.length, approved: approved.length, speakers: s.speakers.length, completeness: s.gaps?.completeness ?? 0, conflicts: visibleConflicts.length }} />
   </main>;
 }

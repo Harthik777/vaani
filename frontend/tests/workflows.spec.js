@@ -7,7 +7,7 @@ const AUDIT = process.env.PW_AUDIT_DIR || "../../../audit";
 // The test backend runs with USE_REAL_LLM=false and USE_REAL_SARVAM=false: every AI/Sarvam path must degrade honestly.
 const MODES = { business: "Business requirements (BRD)", awareness: "Public awareness", audit: "Field audit", deals: "B2B deals" };
 async function start(page, mode = "business", lang = "English") {
-  await page.goto("/?modes=all");  // the landing page shows only the BRD flow unless ?modes=all
+  await page.goto("/?modes=all&ui=english");  // all document types; interface pinned to English for the selectors below
   await page.getByRole("button", { name: new RegExp(MODES[mode].replace(/[()]/g, "\\$&")) }).click();
   await page.getByRole("button", { name: lang, exact: true }).click();
   await page.getByRole("button", { name: "Start capturing" }).click();
@@ -17,20 +17,24 @@ async function toReview(page) {
   await expect(page.getByRole("heading", { name: "The agent's questions" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Extract requirements →" })).toBeEnabled();
   await page.getByRole("button", { name: "Extract requirements →" }).click();
-  await expect(page.getByRole("button", { name: "Review and approve" })).toBeEnabled();
+  await expect(page.locator(".fast-approve")).toBeVisible();
   await vendorView(page);
 }
+// Secondary tools live under "More" on the Speak and Review steps.
+async function moreWays(page) { const d = page.locator(".more-ways"); if (await d.count() && !(await d.evaluate(e => e.open))) await d.locator("summary").click(); }
+async function reviewMore(page) { const d = page.locator(".review-more"); if (await d.count() && !(await d.evaluate(e => e.open))) await d.locator("summary").click(); }
 // The Review step opens in the owner's read-only view; edits in these tests need the vendor view.
 async function vendorView(page) {
+  await reviewMore(page);
   const toggle = page.getByRole("button", { name: /Vendor view/ });
   if (await toggle.count()) await toggle.click();
 }
 async function draft(page, mode = "business") {
   await start(page, mode);
-  await page.getByRole("button", { name: "Use demo", exact: true }).click();
+  await moreWays(page); await page.getByRole("button", { name: "Use demo", exact: true }).click();
   await toReview(page);
 }
-const signoff = page => page.getByRole("button", { name: "Review and approve" }).click();
+const signoff = async page => { await reviewMore(page); await page.getByRole("button", { name: "Review and approve" }).click(); };
 async function approveRemaining(page) {
   const approve = page.getByRole("button", { name: /^Approve/ });
   while (await approve.count()) await approve.first().click();
@@ -170,12 +174,12 @@ test("Hindi meeting demo keeps Hindi quotes and finds the conflict", async ({ pa
 });
 
 test("Deaf/HoH typed flow, back navigation, all skipped, and mode reset", async ({ page }) => {
-  await page.goto("/"); await page.getByText("More options", { exact: false }).click(); await page.getByRole("button", { name: /Deaf \/ HoH/ }).click();
+  await page.goto("/?ui=english"); await page.getByText("More options", { exact: false }).click(); await page.getByRole("button", { name: /Deaf \/ HoH/ }).click();
   await page.getByRole("button", { name: "Start capturing" }).click();
   await expect(page.getByRole("button", { name: "Record microphone" })).toHaveCount(0);
   await page.getByLabel("Transcript", { exact: true }).fill("When stock is low, place a new order.");
-  await page.getByRole("button", { name: "Enter rules manually" }).click();
-  await page.getByRole("button", { name: "Add requirement" }).click();
+  await moreWays(page); await page.getByRole("button", { name: "Enter rules manually" }).click();
+  await reviewMore(page); await page.getByRole("button", { name: "Add requirement" }).click();
   await page.getByLabel("Title", { exact: true }).fill("Manual stock rule");
   await page.getByLabel("If / context").fill("stock is low"); await page.getByLabel("Then / action").fill("place a new order");
   await page.getByLabel("Exact source text").fill("When stock is low, place a new order.");
@@ -223,8 +227,8 @@ test("Milestone clearance requires a passed quality inspection (published deal p
 });
 
 test("Meeting and notes uploads degrade honestly without Sarvam", async ({ page }) => {
-  await page.goto("/"); await page.getByRole("button", { name: "Start capturing" }).click();
-  await page.locator('.import-btn input[type=file]').first().setInputFiles({ name: "call.wav", mimeType: "audio/wav", buffer: Buffer.from("RIFFfake") });
+  await page.goto("/?ui=english"); await page.getByRole("button", { name: "Start capturing" }).click();
+  await moreWays(page); await page.locator('.import-btn input[type=file]').first().setInputFiles({ name: "call.wav", mimeType: "audio/wav", buffer: Buffer.from("RIFFfake") });
   await expect(page.getByRole("alert")).toContainText("needs Sarvam");
   await page.locator('.import-btn input[type=file]').nth(1).setInputFiles({ name: "notes.png", mimeType: "image/png", buffer: Buffer.from("PNGfake") });
   await expect(page.getByRole("alert")).toContainText("Doc AI");
@@ -236,8 +240,8 @@ test("Standalone build works offline with the demo", async ({ page }) => {
   const content = await readFile(filePath, "utf-8");
   expect(content.length).toBeGreaterThan(100000);
   await page.context().setOffline(true);
-  await page.goto(pathToFileURL(filePath).href);
-  await page.getByRole("button", { name: "Start capturing" }).click(); await page.getByRole("button", { name: "Use demo", exact: true }).click();
+  await page.goto(pathToFileURL(filePath).href + "?ui=english");
+  await page.getByRole("button", { name: "Start capturing" }).click(); await moreWays(page); await page.getByRole("button", { name: "Use demo", exact: true }).click();
   await toReview(page); await signoff(page); await approveRemaining(page);
   await expect(page.locator(".brd-doc")).toContainText("Business Requirements Document");
 });
@@ -245,7 +249,7 @@ test("Standalone build works offline with the demo", async ({ page }) => {
 test("Real MediaRecorder retains original audio and reload restores playback", async ({ browser }) => {
   const context = await browser.newContext({ permissions: ["microphone"] });
   const page = await context.newPage();
-  await page.goto("/"); await page.getByRole("button", { name: "Start capturing" }).click();
+  await page.goto("/?ui=english"); await page.getByRole("button", { name: "Start capturing" }).click();
   await page.getByRole("button", { name: "Record microphone" }).click();
   await expect(page.getByRole("button", { name: "Stop recording" })).toBeVisible();
   await page.waitForTimeout(600); await page.getByRole("button", { name: "Stop recording" }).click();

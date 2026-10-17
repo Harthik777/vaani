@@ -78,6 +78,24 @@ python benchmark.py          # writes ../BENCHMARK.md; --no-llm for the verifier
 ```
 Last run (17 Oct 2026): verifier 66/66 planted errors caught, 0 false blocks on 24 genuine requirements; conflict detector 7/7 found, 0 false alarms on Sarvam 105B.
 
+## Interface languages
+The interface follows the language chip: Hindi, Kannada and Tamil are translated (once, by Sarvam Translate) into
+`shared/ui-strings.json`; English is the source. After changing interface text run `python tools/translate_ui.py` in
+`backend/`. `?ui=english` pins the interface to English (the browser tests use it).
+
+## Executable requirements and mediation
+On the Review step, *Try a scenario* sends a situation plus the requirements to the model and shows which requirements fire
+and why. On a stakeholder conflict, *Ask the agent to reconcile both* proposes one rule with a default and an exception;
+the verifier picks the spoken line that carries every number the rule uses, so the proposal is verified like any other rule.
+
+## Deadlines, Google Calendar and Google Drive
+After approval the BRD page lists every dated commitment spoken in the conversation, each with its quote and a one-click
+*Add to Google Calendar* link, plus an .ics download that imports anywhere. An email given on the landing page receives the
+pack (PDF, Word, Excel) automatically when SMTP is configured. For a direct push, add a free Google OAuth client to
+`backend/.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`; enable the Drive and Calendar APIs; redirect URI
+`http://localhost:8000/api/google/callback`): *Connect Google* then one button creates the Google Doc in Drive and the
+Calendar events.
+
 ## Share on a phone (QR codes)
 A portal link that says `localhost` opens nowhere but the laptop. The backend therefore serves the built frontend at
 `/app` and builds share links from the laptop's Wi-Fi address:
@@ -95,7 +113,7 @@ same Wi-Fi opens (allow Python through the Windows firewall when asked). For a l
 cd Vaani_code/vaani-repo/backend
 python -m unittest discover -s tests -p "test_*.py"
 ```
-90 tests cover the verifier, agent, conflicts, BRD drafting, exports, the session-leak and speed fixes from the real test, Sarvam request shapes (v4 codemix and keyterms, v4-flash voices, the 105B request that answers, the cache, the circuit breaker, Kannada, meeting diarization and Doc AI notes) and access control.
+94 tests cover the verifier, agent, conflicts, BRD drafting, exports, the session-leak and speed fixes from the real test, Sarvam request shapes (v4 codemix and keyterms, v4-flash voices, the 105B request that answers, the cache, the circuit breaker, Kannada, meeting diarization and Doc AI notes) and access control.
 
 ```bash
 cd Vaani_code/vaani-repo/frontend
