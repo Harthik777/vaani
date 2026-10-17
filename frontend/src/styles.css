@@ -682,3 +682,14 @@ body.a11y-lowVision{font-size:19px}.a11y-lowVision .card,.a11y-lowVision .widget
 .qr-row figure{margin:0;text-align:center;font-size:.78rem;color:var(--mute);max-width:180px}
 .qr-row img{display:block;border:1px solid var(--line);border-radius:6px;background:#fff;padding:4px;width:168px;height:168px;margin:0 auto 6px}
 @media print{.qr-row{display:flex}}
+
+/* ── Owner view on Review ─────────────────────────────────────────── */
+.view-toggle{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+.view-toggle .chip{font-size:.9rem;padding:7px 14px}
+.owner-card{padding:18px 20px;margin:12px 0}
+.owner-card h3{font-size:1.1rem}
+.owner-actions{margin:8px 0 0}.owner-actions .btn{padding:8px 14px;font-size:.9rem}
+
+/* step bar never stacks: it scrolls sideways on narrow screens */
+.phase-list{flex-wrap:nowrap}
+@media(max-width:760px){.topbar nav{flex-basis:100%;order:3}.phase-list li{padding:6px 10px 6px 0;margin-right:8px}}

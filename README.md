@@ -65,6 +65,9 @@ npm run build:standalone
 ```
 This writes `vaani-prototype.html`. The demo runs fully offline with sample data. Live AI and Sarvam features need the backend.
 
+## WhatsApp bot (owners never open the website)
+Point the Twilio WhatsApp sandbox webhook at `https://<your-ngrok-host>/api/whatsapp/inbound` (run `ngrok http 8000`, set `PUBLIC_API_URL` to the https URL, restart). Owners send voice notes or text to the sandbox number; VAANI asks the missing questions back with voice notes and, on "brd", sends the summary, the portal link, a QR code and a voice summary. Credentials: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM` in `backend/.env`.
+
 ## Measured accuracy
 ```bash
 cd Vaani_code/vaani-repo/backend
@@ -75,9 +78,9 @@ Last run (17 Oct 2026): verifier 66/66 planted errors caught, 0 false blocks on 
 ## Tests
 ```bash
 cd Vaani_code/vaani-repo/backend
-python -m unittest tests/test_workflows.py tests/test_brd_agent.py tests/test_sarvam_v4.py tests/test_meeting_notes.py tests/test_whatsapp.py tests/test_clarity_breadth.py
+python -m unittest tests/test_workflows.py tests/test_brd_agent.py tests/test_sarvam_v4.py tests/test_meeting_notes.py tests/test_whatsapp.py tests/test_clarity_breadth.py tests/test_wabot.py
 ```
-79 tests cover the verifier, agent, conflicts, BRD drafting, exports, Sarvam request shapes (v4 codemix and keyterms, v4-flash voices, the 105B request that answers, the cache, the circuit breaker, Kannada, meeting diarization and Doc AI notes) and access control.
+85 tests cover the verifier, agent, conflicts, BRD drafting, exports, Sarvam request shapes (v4 codemix and keyterms, v4-flash voices, the 105B request that answers, the cache, the circuit breaker, Kannada, meeting diarization and Doc AI notes) and access control.
 
 ```bash
 cd Vaani_code/vaani-repo/frontend

@@ -15,7 +15,7 @@ import SourceAudio from "./components/SourceAudio.jsx";
 import SharePanel from "./components/SharePanel.jsx";
 import Portal from "./components/Portal.jsx";
 import Interview from "./components/Interview.jsx";
-import { ConflictCard, VerifierSummary } from "./components/Verifier.jsx";
+import { ConflictCard, VerifierSummary, VerifyBadge } from "./components/Verifier.jsx";
 import useRecorder from "./components/useRecorder.js";
 
 const PHASES = ["landing", "record", "interview", "extract", "signoff", "brd"];
@@ -86,6 +86,10 @@ function SarvamStrip({ health, used }) {
 function Workspace() {
   const [s, set] = useState(restore), [error, setError] = useState(""), [busy, setBusy] = useState(false), [storageError, setStorageError] = useState("");
   const [health, setHealth] = useState(null), [aiBusy, setAiBusy] = useState(""), [uploading, setUploading] = useState("");
+  // Review view and per-card editing live in the session so a reload keeps them.
+  const reviewView = s.reviewView || "owner", editing = s.editing || [];
+  const setReviewView = v => patch({ reviewView: v });
+  const setEditing = fn => patch({ editing: typeof fn === "function" ? fn(editing) : fn });
   const prefetched = useRef("");
   const heading = useRef(null), requestVersion = useRef(0), active = useRef(true), drafting = useRef(false);
   const patch = value => set(p => ({ ...p, ...value }));
@@ -161,9 +165,13 @@ function Workspace() {
     setError(""); setUploading("Sarvam is transcribing the recording and separating speakers (about 10 seconds per minute of audio)…");
     try {
       const out = await api.meeting(file, s.lang, 2, keytermsFor(s));
-      const evidence = { ...out.evidence, local: false, duration: out.lines.reduce((m, l) => Math.max(m, l.end || 0), 0) || undefined, speaker: null };
-      invalidate({ tx: out.transcript, demo: false, rules: [], answers: [], skipped: [], gaps: null, conflicts: [], rejected: [],
-        evidence: [evidence], speakers: out.speakers, speaker: out.speakers[0], sarvamUsed: { ...s.sarvamUsed, stt: true, diarization: true } });
+      // First voice heard is the Owner, second the Manager; rename below if that is wrong.
+      const names = out.speakers.map((n, i) => i === 0 ? "Owner" : i === 1 ? "Manager" : n);
+      let tx = out.transcript;
+      out.speakers.forEach((n, i) => { tx = tx.split("[" + n + "] ").join("[" + names[i] + "] "); });
+      const evidence = { ...out.evidence, local: false, duration: out.lines.reduce((m, l) => Math.max(m, l.end || 0), 0) || undefined, speaker: null, uploaded: true };
+      invalidate({ tx, demo: false, rules: [], answers: [], skipped: [], gaps: null, conflicts: [], rejected: [],
+        evidence: [evidence], speakers: names, speaker: names[0], sarvamUsed: { ...s.sarvamUsed, stt: true, diarization: true } });
     } catch (e) { setError(e.message); }
     finally { setUploading(""); }
   };
@@ -379,10 +387,10 @@ function Workspace() {
         </div>
         {uploading && <p role="status" className="agent-thinking">⏳ {uploading}</p>}
         {romanLines && !uploading && <p className="rename-row"><span>Typed in Roman script?</span><button className="btn btn-ghost" disabled={locked} onClick={toNativeScript}>Convert to {langLabel} script (Sarvam)</button></p>}
-        {s.evidence.some(e => e.speaker === null) && s.speakers.some(n => /^Speaker \d+$/.test(n)) && <div className="rename-row">
-          <span>Name the speakers:</span>
-          {s.speakers.filter(n => /^Speaker \d+$/.test(n)).map(n => <form key={n} className="add-speaker" onSubmit={e => { e.preventDefault(); renameSpeaker(n, e.currentTarget.name_input.value); }}>
-            <input name="name_input" aria-label={"Rename " + n} placeholder={n + " → e.g. Owner"} /><button className="btn btn-ghost">Rename</button></form>)}
+        {s.evidence.some(e => e.uploaded) && <div className="rename-row">
+          <span>Voices named in the order they were heard. Wrong? Rename:</span>
+          {s.speakers.map(n => <form key={n} className="add-speaker" onSubmit={e => { e.preventDefault(); renameSpeaker(n, e.currentTarget.name_input.value); e.currentTarget.reset(); }}>
+            <input name="name_input" aria-label={"Rename " + n} placeholder={n + " → …"} /><button className="btn btn-ghost">Rename</button></form>)}
         </div>}
         {s.a11y !== "deaf" && <div className="mic-row">
           <button className={"mic-btn" + (recorder.recording ? " on" : "")} aria-label={recorder.recording ? "Stop recording" : "Record microphone"}
@@ -422,9 +430,22 @@ function Workspace() {
         onLater={() => patch({ conflicts: s.conflicts.map(x => x === c ? { ...x, deferred: true } : x) })} />)}
       <VerifierSummary rules={s.rules} checks={checks} rejected={s.rejected} brain={s.extractBrain} />
       {!!s.reviewNotes.length && <aside className="notice"><h2>Review notes</h2><ul>{s.reviewNotes.map((n, i) => <li key={i}>{n}</li>)}</ul></aside>}
-      {s.rules.map((r, i) => <RuleEditor key={r.id} rule={r} check={checks[i]} evidence={s.evidence} onChange={next => updateRules(s.rules.map(v => v.id === r.id ? next : v))} onDelete={() => updateRules(s.rules.filter(v => v.id !== r.id))} />)}
-      <div className="actions"><button className="btn btn-ghost" disabled={busy} onClick={() => updateRules([...s.rules, { id: crypto.randomUUID(), title: "", condition: "", action: "", exception: null, confidence: "MEDIUM", type: "requirement", source_quote: "", numbers: [], speaker: s.speaker, evidence_id: null, start: null, end: null }])}>Add requirement</button>
-        <button className="btn btn-primary" disabled={busy || !s.rules.length} onClick={() => { if (validateRules()) { setError(""); patch({ phase: "signoff" }); } }}>Review and approve →</button></div>
+      {!!s.rules.length && <div className="view-toggle" role="group" aria-label="Review view">
+        <button className={"chip" + (reviewView === "owner" ? " on" : "")} aria-pressed={reviewView === "owner"} onClick={() => setReviewView("owner")}>Owner view</button>
+        <button className={"chip" + (reviewView === "vendor" ? " on" : "")} aria-pressed={reviewView === "vendor"} onClick={() => setReviewView("vendor")}>Vendor view (edit everything)</button>
+        <span className="source-note">Owner view: read, listen, and tap Fix only where something is wrong.</span></div>}
+      {s.rules.map((r, i) => (reviewView === "vendor" || editing.includes(r.id) || !r.title)
+        ? <RuleEditor key={r.id} rule={r} check={checks[i]} evidence={s.evidence} onChange={next => updateRules(s.rules.map(v => v.id === r.id ? next : v))} onDelete={() => updateRules(s.rules.filter(v => v.id !== r.id))} />
+        : <article key={r.id} className={"rule owner-card rule-" + (checks[i]?.status || "none")}>
+            <div className="rh"><h3>{r.title}</h3>{r.speaker && <span className="speaker-chip">{r.speaker}</span>}</div>
+            <p className="logic">{[r.condition && "IF " + r.condition, r.action && "THEN " + r.action, r.exception && "UNLESS " + r.exception].filter(Boolean).join(" ")}</p>
+            <VerifyBadge check={checks[i]} />
+            {r.source_quote && <blockquote>{r.source_quote}</blockquote>}
+            <SourceAudio evidence={s.evidence.find(e => e.id === r.evidence_id)} start={r.start} end={r.end} caption={r.start != null ? `🔊 Original voice · ${r.start}s–${r.end}s` : undefined} />
+            <div className="actions owner-actions"><button className="btn btn-ghost" onClick={() => setEditing(ids => [...ids, r.id])}>Fix this</button><button className="btn btn-ghost" onClick={() => updateRules(s.rules.filter(v => v.id !== r.id))}>Not needed</button></div>
+          </article>)}
+      <div className="actions"><button className="btn btn-ghost" disabled={busy} onClick={() => { const id = crypto.randomUUID(); set(p => ({ ...p, editing: [...(p.editing || []), id] })); updateRules([...s.rules, { id, title: "", condition: "", action: "", exception: null, confidence: "MEDIUM", type: "requirement", source_quote: "", numbers: [], speaker: s.speaker, evidence_id: null, start: null, end: null }]); }}>Add requirement</button>
+        <button className="btn btn-primary" disabled={busy || !s.rules.length} onClick={() => { if (validateRules()) { setError(""); patch({ phase: "signoff", metadata: { ...s.metadata, reviewer: s.metadata.reviewer || s.metadata.owner || s.speakers[0] || "" } }); } }}>Review and approve →</button></div>
     </>}
 
     {s.phase === "signoff" && s.rules[s.soIdx] && <><h1>Source-backed sign-off</h1><p>Requirement {s.soIdx + 1} of {s.rules.length}. Listen to the original voice, hear it read back in your language, then decide.</p><progress aria-label="Review progress" max={s.rules.length} value={s.soIdx} />

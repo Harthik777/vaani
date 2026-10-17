@@ -39,10 +39,17 @@ class WhatsAppTests(unittest.TestCase):
             whatsapp.normalise("12")
 
     def test_route_is_honest_without_credentials(self):
-        r = self.client.post("/api/whatsapp/send", json={"to": "+919876543210", "summary": "x"})
-        self.assertEqual(r.status_code, 503)
-        self.assertIn("TWILIO_ACCOUNT_SID", r.json()["detail"])
-        self.assertFalse(self.client.get("/api/health").json()["whatsapp"])
+        with patch.object(config, "TWILIO_ACCOUNT_SID", ""), patch.object(config, "TWILIO_AUTH_TOKEN", ""),              patch.object(config, "TWILIO_API_KEY_SID", ""), patch.object(config, "TWILIO_API_KEY_SECRET", ""):
+            r = self.client.post("/api/whatsapp/send", json={"to": "+919876543210", "summary": "x"})
+            self.assertEqual(r.status_code, 503)
+            self.assertIn("TWILIO_ACCOUNT_SID", r.json()["detail"])
+            self.assertFalse(self.client.get("/api/health").json()["whatsapp"])
+
+    def test_api_key_auth_is_preferred_when_present(self):
+        with patch.object(config, "TWILIO_API_KEY_SID", "SKx"), patch.object(config, "TWILIO_API_KEY_SECRET", "sec"), patch.object(config, "TWILIO_AUTH_TOKEN", "tok"):
+            self.assertEqual(whatsapp.auth(), ("SKx", "sec"))
+        with patch.object(config, "TWILIO_API_KEY_SID", ""), patch.object(config, "TWILIO_ACCOUNT_SID", "ACx"), patch.object(config, "TWILIO_AUTH_TOKEN", "tok"):
+            self.assertEqual(whatsapp.auth(), ("ACx", "tok"))
 
     def test_send_posts_twilio_message_with_text_and_portal_link(self):
         fake = AsyncMock(); fake.__aenter__.return_value = fake

@@ -18,6 +18,12 @@ async function toReview(page) {
   await expect(page.getByRole("button", { name: "Extract requirements →" })).toBeEnabled();
   await page.getByRole("button", { name: "Extract requirements →" }).click();
   await expect(page.getByRole("button", { name: "Review and approve" })).toBeEnabled();
+  await vendorView(page);
+}
+// The Review step opens in the owner's read-only view; edits in these tests need the vendor view.
+async function vendorView(page) {
+  const toggle = page.getByRole("button", { name: /Vendor view/ });
+  if (await toggle.count()) await toggle.click();
 }
 async function draft(page, mode = "business") {
   await start(page, mode);
@@ -106,6 +112,8 @@ test("Meeting demo: agent interview, conflict, verifier, full BRD and exports", 
   await page.screenshot({ path: AUDIT + "/meeting-2-review.png", fullPage: true });
   await conflict.getByRole("button", { name: "Keep Manager's version" }).click();
   await expect(page.locator(".conflict-card")).toHaveCount(0);
+  await expect(page.locator(".owner-card")).toHaveCount(4);
+  await vendorView(page);
   await expect(page.locator(".rule-editor")).toHaveCount(4);
 
   // A user edit that introduces an unspoken number is caught immediately.

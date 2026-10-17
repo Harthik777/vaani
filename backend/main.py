@@ -55,6 +55,7 @@ def health():
         "cache": config.CACHE_ENABLED,
         "whatsapp": whatsapp.enabled(),
         "whatsapp_media": whatsapp.enabled() and whatsapp.public_media_allowed(),
+        "whatsapp_bot": whatsapp.enabled(),
     }
 
 

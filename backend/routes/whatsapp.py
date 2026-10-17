@@ -2,11 +2,12 @@
 import base64
 import secrets
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi.responses import Response as RawResponse
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from models import Language
-from services import config, sarvam, whatsapp
+from services import config, sarvam, whatsapp, wabot
 
 router = APIRouter()
 
@@ -70,3 +71,15 @@ async def media(name: str):
     if not path.exists():
         raise HTTPException(404)
     return FileResponse(path, media_type="audio/wav", headers={"Cache-Control": "private, max-age=3600"})
+
+
+@router.post("/api/whatsapp/inbound")
+async def inbound(request: Request, From: str = Form(""), Body: str = Form(""), NumMedia: str = Form("0"),
+                  MediaUrl0: str = Form(""), MediaContentType0: str = Form("")):
+    """Twilio webhook ("When a message comes in"). Point the WhatsApp sandbox at https://<public-host>/api/whatsapp/inbound.
+    Replies are TwiML; voice notes are fetched from Twilio with the account credentials."""
+    if not From.startswith("whatsapp:"):
+        raise HTTPException(400, "Not a WhatsApp message")
+    media_url = MediaUrl0 if NumMedia not in ("", "0") else None
+    xml = await wabot.handle(From, Body, media_url, MediaContentType0 or None)
+    return RawResponse(xml, media_type="application/xml")

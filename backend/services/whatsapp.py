@@ -16,8 +16,15 @@ from services import config
 TWILIO_BASE = "https://api.twilio.com/2010-04-01/Accounts"
 
 
+def auth() -> tuple[str, str]:
+    """Basic auth pair: an API key (SK sid + secret) when configured, else the account SID + auth token."""
+    if config.TWILIO_API_KEY_SID and config.TWILIO_API_KEY_SECRET:
+        return (config.TWILIO_API_KEY_SID, config.TWILIO_API_KEY_SECRET)
+    return (config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN)
+
+
 def enabled() -> bool:
-    return bool(config.TWILIO_ACCOUNT_SID and config.TWILIO_AUTH_TOKEN and config.TWILIO_WHATSAPP_FROM)
+    return bool(config.TWILIO_ACCOUNT_SID and config.TWILIO_WHATSAPP_FROM and (config.TWILIO_AUTH_TOKEN or (config.TWILIO_API_KEY_SID and config.TWILIO_API_KEY_SECRET)))
 
 
 def normalise(number: str, default_cc: str = "+91") -> str:
@@ -46,7 +53,7 @@ async def send(to: str, body: str, media_url: str | None = None) -> dict:
     data = {"From": config.TWILIO_WHATSAPP_FROM, "To": normalise(to), "Body": body[:1500]}
     if media_url and public_media_allowed():
         data["MediaUrl"] = media_url
-    async with httpx.AsyncClient(timeout=30, auth=(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN)) as client:
+    async with httpx.AsyncClient(timeout=30, auth=auth()) as client:
         r = await client.post(f"{TWILIO_BASE}/{config.TWILIO_ACCOUNT_SID}/Messages.json", data=data)
         if r.status_code >= 400:
             detail = r.json().get("message", r.text[:200]) if r.headers.get("content-type", "").startswith("application/json") else r.text[:200]
