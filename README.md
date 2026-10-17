@@ -18,7 +18,7 @@ Indian business owners describe what they need in Hindi, Tamil, Telugu, Marathi 
 | 3. Agent questions | The agent checks the conversation against the 8 things every BRD needs (goal, users, features, timeline, budget, success measure, constraints, sign-off owner). It shows what is already covered, **with the exact words**, and asks only for what is missing: in your language, out loud. The completeness meter climbs as you answer. | **Sarvam 105B** (strict JSON schema; Gemini as fallback), **Sarvam Translate**, **Sarvam Bulbul** voice |
 | 4. Review | Requirements are extracted with exact source quotes. The **verifier** checks each one, flags **vague words** (jaldi, simple, achha) with a clarifying question, and the agent flags **conflicts between speakers** (for example, Owner says 50 kg, Manager says 100 kg). | Gemini (extraction) + **Sarvam 105B** (conflict check) + deterministic verifier |
 | 5. Approve | Approve each requirement: hear the original voice clip, hear the rule read back in your own language, then say "haan" or "nahi" (or use the buttons). The spoken word is recorded against the approval. | **Sarvam Bulbul** + Translate + **Saaras** |
-| 6. BRD + App | A full BRD (12 standard sections, functional requirements with traceability, acceptance criteria, open questions, a verification report and sign-off), plus a web app generated from the approved BRD. **⬇ Download BRD:** PDF, Word, Markdown, Jira CSV. **🌐 One language switch** puts the BRD (Sarvam translation under each English line) *and* the app into any of the 7 languages. Downloads then include the translation; the Jira CSV stays English for the vendor. **🔊 Listen** to a BRD summary in that language. A **vendor hand-off** table opens the page. Publish, then send the summary and link to the owner's **WhatsApp** (Twilio, optional) or share the prefilled link. | Gemini, **Sarvam Translate + Bulbul** |
+| 6. BRD + App | A full BRD (12 standard sections, functional requirements with traceability, acceptance criteria, open questions, a verification report and sign-off), plus a web app generated from the approved BRD. **⬇ Download BRD:** PDF, Word, Markdown, Jira CSV. **🌐 One language switch** puts the BRD (Sarvam translation under each English line) *and* the app into any of the 7 languages. Downloads then include the translation; the Jira CSV stays English for the vendor. **🔊 Listen** to a BRD summary in that language. A **vendor hand-off** table opens the page. Publish, then hand the owner the QR code or the prefilled WhatsApp link. | Gemini, **Sarvam Translate + Bulbul** |
 
 ## The verifier (why the AI can't slip things in)
 - **Quotes must be exact.** Every requirement and every spoken BRD item must quote the transcript verbatim. If the AI mis-copies a quote by a character or two (seen live: a dropped Hindi vowel sign), Vaani swaps in the real transcript text and labels it. Anything else is rejected and shown struck through.
@@ -65,9 +65,6 @@ npm run build:standalone
 ```
 This writes `vaani-prototype.html`. The demo runs fully offline with sample data. Live AI and Sarvam features need the backend.
 
-## WhatsApp bot (owners never open the website)
-Point the Twilio WhatsApp sandbox webhook at `https://<your-ngrok-host>/api/whatsapp/inbound` (run `ngrok http 8000`, set `PUBLIC_API_URL` to the https URL, restart). Owners send voice notes or text to the sandbox number; VAANI asks the missing questions back with voice notes and, on "brd", sends the summary, the portal link, a QR code and a voice summary. Credentials: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM` in `backend/.env`.
-
 ## Measured accuracy
 ```bash
 cd Vaani_code/vaani-repo/backend
@@ -78,9 +75,9 @@ Last run (17 Oct 2026): verifier 66/66 planted errors caught, 0 false blocks on 
 ## Tests
 ```bash
 cd Vaani_code/vaani-repo/backend
-python -m unittest tests/test_workflows.py tests/test_brd_agent.py tests/test_sarvam_v4.py tests/test_meeting_notes.py tests/test_whatsapp.py tests/test_clarity_breadth.py tests/test_wabot.py
+python -m unittest tests/test_workflows.py tests/test_brd_agent.py tests/test_sarvam_v4.py tests/test_meeting_notes.py tests/test_clarity_breadth.py
 ```
-85 tests cover the verifier, agent, conflicts, BRD drafting, exports, Sarvam request shapes (v4 codemix and keyterms, v4-flash voices, the 105B request that answers, the cache, the circuit breaker, Kannada, meeting diarization and Doc AI notes) and access control.
+73 tests cover the verifier, agent, conflicts, BRD drafting, exports, Sarvam request shapes (v4 codemix and keyterms, v4-flash voices, the 105B request that answers, the cache, the circuit breaker, Kannada, meeting diarization and Doc AI notes) and access control.
 
 ```bash
 cd Vaani_code/vaani-repo/frontend

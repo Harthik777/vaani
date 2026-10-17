@@ -693,3 +693,13 @@ body.a11y-lowVision{font-size:19px}.a11y-lowVision .card,.a11y-lowVision .widget
 /* step bar never stacks: it scrolls sideways on narrow screens */
 .phase-list{flex-wrap:nowrap}
 @media(max-width:760px){.topbar nav{flex-basis:100%;order:3}.phase-list li{padding:6px 10px 6px 0;margin-right:8px}}
+
+/* ── UX pass 2: fewer decisions before the owner speaks ─────────────── */
+.more-options{margin:6px 0 18px}.more-options summary{font-size:.9rem;color:var(--mute);padding:8px 0}
+.more-options .choice-group{margin:12px 0}
+.tx-edit{margin-top:14px}.tx-edit summary{font-size:.9rem;color:var(--teal);font-weight:600;padding:6px 0}
+.tx-edit label{margin-top:8px}
+.meta{margin:14px 0}.meta-primary{font-weight:600;color:var(--ink)}.meta-primary input{font-size:1.02rem}
+.meta-more{margin-top:6px}.meta-more summary{font-size:.88rem;color:var(--mute);padding:6px 0}
+
+@media(max-width:760px){.sarvam-strip{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}.sarvam-strip::-webkit-scrollbar{display:none}.sv-chip{white-space:nowrap}}

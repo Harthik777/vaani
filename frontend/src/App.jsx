@@ -86,6 +86,9 @@ function SarvamStrip({ health, used }) {
 function Workspace() {
   const [s, set] = useState(restore), [error, setError] = useState(""), [busy, setBusy] = useState(false), [storageError, setStorageError] = useState("");
   const [health, setHealth] = useState(null), [aiBusy, setAiBusy] = useState(""), [uploading, setUploading] = useState("");
+  // The transcript box stays open while there is nothing to show and in Deaf/HoH mode; otherwise the feed is the view.
+  const [txOpen, setTxOpen] = useState(() => !s.tx.trim() || s.a11y === "deaf");
+  useEffect(() => { setTxOpen(!s.tx.trim() || s.a11y === "deaf"); }, [s.tx.trim() === "", s.a11y, s.phase]);
   // Review view and per-card editing live in the session so a reload keeps them.
   const reviewView = s.reviewView || "owner", editing = s.editing || [];
   const setReviewView = v => patch({ reviewView: v });
@@ -365,8 +368,10 @@ function Workspace() {
         ? <fieldset className="choice-group"><legend>What are you capturing?</legend><div className="intent-grid">{INTENT_MODES.map(m => <button key={m.id} aria-pressed={s.mode === m.id} className={"intent-card" + (s.mode === m.id ? " on" : "")} onClick={() => { if (m.id !== s.mode) set(fresh(m.id, s.lang, s.a11y, s.targetDevice)); }}><span className="intent-icon">{m.icon}</span><span><strong>{m.title}</strong><span className="intent-desc">{m.desc}</span></span></button>)}</div></fieldset>
         : <p className="landing-mode"><span>Capturing: <b>{INTENT_MODES[0].title}</b></span><a href="?modes=all">Other document types</a></p>}
       <fieldset className="choice-group"><legend>Language</legend><div className="chips">{LANGS.map(([c, label]) => <button aria-pressed={s.lang === c} key={c} className={"chip" + (s.lang === c ? " on" : "")} onClick={() => { if (c !== s.lang) set(fresh(s.mode, c, s.a11y, s.targetDevice)); }}>{label}</button>)}</div></fieldset>
-      <fieldset className="choice-group"><legend>Device / Output experience</legend><div className="modes">{[["desktop", "💻 Laptop / Desktop Webpage"], ["mobile", "📱 Mobile App"]].map(([c, label]) => <button aria-pressed={s.targetDevice === c} className={"mode" + (s.targetDevice === c ? " on" : "")} key={c} onClick={() => patch({ targetDevice: c })}>{label}</button>)}</div></fieldset>
-      <fieldset className="choice-group"><legend>Accessibility</legend><div className="modes">{[["standard", "Standard"], ["lowVision", "Low vision"], ["deaf", "Deaf / HoH · type input"]].map(([c, label]) => <button aria-pressed={s.a11y === c} className={"mode" + (s.a11y === c ? " on" : "")} key={c} onClick={() => patch({ a11y: c })}>{label}</button>)}</div></fieldset>
+      <details className="more-options" open={s.a11y !== "standard" || s.targetDevice === "mobile"}><summary>More options: app type, accessibility</summary>
+        <fieldset className="choice-group"><legend>Device / Output experience</legend><div className="modes">{[["desktop", "💻 Laptop / Desktop Webpage"], ["mobile", "📱 Mobile App"]].map(([c, label]) => <button aria-pressed={s.targetDevice === c} className={"mode" + (s.targetDevice === c ? " on" : "")} key={c} onClick={() => patch({ targetDevice: c })}>{label}</button>)}</div></fieldset>
+        <fieldset className="choice-group"><legend>Accessibility</legend><div className="modes">{[["standard", "Standard"], ["lowVision", "Low vision"], ["deaf", "Deaf / HoH · type input"]].map(([c, label]) => <button aria-pressed={s.a11y === c} className={"mode" + (s.a11y === c ? " on" : "")} key={c} onClick={() => patch({ a11y: c })}>{label}</button>)}</div></fieldset>
+      </details>
       <button className="btn btn-primary btn-full" onClick={() => patch({ phase: "record" })}>Start capturing →</button>
     </>}
 
@@ -403,7 +408,10 @@ function Workspace() {
         </div>}
         {transcriptLines.length > 0 && <ol className="feed" aria-label="What was said">{transcriptLines.map((l, i) => <li key={i} className={"feed-line" + (l.speaker ? " spk-" + (Math.max(0, s.speakers.indexOf(l.speaker)) % 4) : "")}>
           {l.speaker && <span className="speaker-chip">{l.speaker}</span>}<span lang={s.lang === "english" ? "en" : undefined}>{l.text}</span></li>)}</ol>}
-        <label htmlFor="transcript-input">Transcript</label><textarea id="transcript-input" className="transcript" value={s.tx} disabled={recorder.requesting || recorder.recording || recorder.processing > 0 || !!uploading} placeholder="Type or paste the speaker's words, or paste a WhatsApp chat export. Start a line with [Name] to mark who said it." onChange={e => invalidate({ tx: e.target.value, rules: [], demo: false, gaps: null })} />
+        <details className="tx-edit" open={txOpen} onToggle={e => setTxOpen(e.currentTarget.open)}>
+          <summary>{s.tx.trim() ? "Edit the words" : "Type or paste the words instead"}</summary>
+          <label htmlFor="transcript-input">Transcript</label><textarea id="transcript-input" className="transcript" value={s.tx} disabled={recorder.requesting || recorder.recording || recorder.processing > 0 || !!uploading} placeholder="Type or paste the speaker's words, or paste a WhatsApp chat export. Start a line with [Name] to mark who said it." onChange={e => invalidate({ tx: e.target.value, rules: [], demo: false, gaps: null })} />
+        </details>
       </section>
       <MetadataForm mode={s.mode} metadata={s.metadata} onChange={metadata => invalidate({ metadata })} />
       <div className="actions">
@@ -461,7 +469,7 @@ function Workspace() {
       evidence={s.evidence} langs={LANGS} lang={s.lang} reset={reset} widgets={s.widgets} onWidgets={widgets => patch({ widgets })} metadata={metadata}
       ai={{ busy: aiBusy, error: s.aiError, stats: s.ai?.stats }} onRedraft={() => { patch({ ai: null, aiError: "", app: null, docLang: "english", translations: null }); }} onRegenerateApp={() => generateApp()}
       docLang={s.docLang} translations={s.translations} onLanguage={(docLang, translations) => { patch({ docLang, translations }); generateApp({ ...serverBody, app_language: docLang, translations: translations || {} }); }}
-      serverBody={serverBody} sarvamVoice={sarvamVoice} onSarvamUsed={markUsed} completeness={s.gaps?.completeness} a11y={s.a11y} whatsapp={!!health?.whatsapp}
+      serverBody={serverBody} sarvamVoice={sarvamVoice} onSarvamUsed={markUsed} completeness={s.gaps?.completeness} a11y={s.a11y}
       shareUrl={s.published?.preview_url || s.published?.url} share={<SharePanel published={s.published} onPublish={publish} busy={busy} mode={s.mode} />} targetDevice={s.targetDevice} />}
   </main>;
 }

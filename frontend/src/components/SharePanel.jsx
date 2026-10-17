@@ -1,14 +1,7 @@
 import { useState } from "react";
 import { api } from "../api/client.js";
-export default function SharePanel({ published, onPublish, busy, mode, whatsapp, summary, title, lang }) {
-  const [message, setMessage] = useState(""), [phone, setPhone] = useState(""), [sending, setSending] = useState(false);
-  const sendWhatsApp = async () => {
-    setSending(true); setMessage("");
-    try {
-      const out = await api.whatsapp({ to: phone, portal_url: url, title: title || "", summary: summary || "", lang: lang || "hindi", with_audio: true });
-      setMessage(`Sent to ${out.to.replace("whatsapp:", "")} (Twilio ${out.status})${out.media ? ", with the voice summary" : ""}.${out.audio_note ? " " + out.audio_note : ""}`);
-    } catch (e) { setMessage(e.message); } finally { setSending(false); }
-  };
+export default function SharePanel({ published, onPublish, busy, mode, title }) {
+  const [message, setMessage] = useState("");
   const url = published?.preview_url || published?.url;
   return <section className="card share-panel"><h3>Shareable Web Portal</h3>
     <p>{mode === "awareness" ? "Publish a public web portal with your approved rules and recordings for community distribution." : "Publish a private web portal accessible to authorized parties with this session's access key."}</p>
@@ -23,11 +16,6 @@ export default function SharePanel({ published, onPublish, busy, mode, whatsapp,
         <button className="btn btn-ghost" style={{ flex: 1 }} onClick={async () => { try { await navigator.clipboard.writeText(url); setMessage("Link copied to clipboard."); } catch { setMessage("Select and copy the URL above."); } }}>Copy link</button>
         <a className="btn btn-ghost" style={{ flex: 1, textDecoration: "none", textAlign: "center" }} target="_blank" rel="noreferrer" href={"https://wa.me/?text=" + encodeURIComponent("Vaani Portal: " + url)}>WhatsApp</a>
       </div>
-      {whatsapp && <form className="wa-send" onSubmit={e => { e.preventDefault(); sendWhatsApp(); }}>
-        <label>Owner's WhatsApp number<input id="wa-phone" value={phone} placeholder="+91 98765 43210" onChange={e => setPhone(e.target.value)} /></label>
-        <button className="btn btn-primary" disabled={sending || phone.trim().length < 8}>{sending ? "Sending…" : "Send BRD summary on WhatsApp"}</button>
-        <p className="source-note">Sends the summary in the owner's language with the portal link (and the voice note when the server is public).</p>
-      </form>}
       <p className="source-note" style={{ marginTop: "10px" }}>Published portals are preserved as permanent snapshots.</p></>}
     <p role="status">{message}</p>
   </section>;

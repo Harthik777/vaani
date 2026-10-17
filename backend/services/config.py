@@ -74,13 +74,6 @@ if os.getenv("LLM_PROVIDER", "").strip().lower() == "sarvam" and SARVAM_API_KEY:
 # falling back to the main LLM on any failure. A circuit breaker (services.sarvam) stops waiting on it after
 # two consecutive failures, so a bad key or outage costs at most two short timeouts.
 AGENT_LLM = os.getenv("AGENT_LLM", "sarvam").strip().lower()
-TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
-# Optional API key (SKxxxx + secret) instead of the account auth token; the Account SID is still needed for URLs.
-TWILIO_API_KEY_SID = os.getenv("TWILIO_API_KEY_SID", "").strip()
-TWILIO_API_KEY_SECRET = os.getenv("TWILIO_API_KEY_SECRET", "").strip()
-TWILIO_WHATSAPP_FROM = os.getenv("TWILIO_WHATSAPP_FROM", "").strip()
-WHATSAPP_BOT_LANG = os.getenv("WHATSAPP_BOT_LANG", "hindi").strip().lower() or "hindi"
 PAYTM_MID = os.getenv("PAYTM_MID", "")
 PAYTM_KEY = os.getenv("PAYTM_KEY", "")
 PAYTM_ENV = os.getenv("PAYTM_ENV", "staging")

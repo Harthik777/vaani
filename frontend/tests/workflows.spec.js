@@ -170,7 +170,7 @@ test("Hindi meeting demo keeps Hindi quotes and finds the conflict", async ({ pa
 });
 
 test("Deaf/HoH typed flow, back navigation, all skipped, and mode reset", async ({ page }) => {
-  await page.goto("/"); await page.getByRole("button", { name: /Deaf \/ HoH/ }).click();
+  await page.goto("/"); await page.getByText("More options", { exact: false }).click(); await page.getByRole("button", { name: /Deaf \/ HoH/ }).click();
   await page.getByRole("button", { name: "Start capturing" }).click();
   await expect(page.getByRole("button", { name: "Record microphone" })).toHaveCount(0);
   await page.getByLabel("Transcript", { exact: true }).fill("When stock is low, place a new order.");
@@ -192,6 +192,7 @@ test("Deaf/HoH typed flow, back navigation, all skipped, and mode reset", async 
 test("Live text cannot silently become demo rules and edits invalidate approval", async ({ page }) => {
   await draft(page); await signoff(page); await approveRemaining(page);
   for (let i = 0; i < 4; i++) await page.getByRole("button", { name: "Back", exact: false }).click();
+  if (!(await page.locator(".tx-edit").evaluate(e => e.open))) await page.getByText("Edit the words", { exact: true }).click();
   await page.getByLabel("Transcript", { exact: true }).fill("These are real custom words.");
   await toReviewExpectingFailure(page);
   await expect(page.locator(".rule-editor")).toHaveCount(0);

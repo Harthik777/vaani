@@ -108,7 +108,6 @@ export const api = {
       : request("/api/evidence/" + evidence.id, { key: evidence.key, binary: true });
   },
   publish: (body, key) => post("/api/portals", body, { key }),
-  whatsapp: body => post("/api/whatsapp/send", body, { timeout: 60000 }),
   transliterate: body => post("/api/transliterate", body, { timeout: 60000 }),
   qrUrl: (data, size = 6) => BASE + "/api/qr.png?size=" + size + "&data=" + encodeURIComponent(data),
   portal: (id, key) => request("/api/portals/" + id, { key }),

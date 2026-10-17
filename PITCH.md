@@ -31,9 +31,7 @@ Then voice sign-off, then the BRD and app. Say "voice-first BRD" last, not first
 3. **The verifier, live.** Type `48` into a rule: "⛔ 48 (not spoken). The AI can't sneak a number in, and neither can we." Undo it. Point at a 🔎 chip: "And it won't let 'jaldi' into a contract either; it asks how many hours."
 4. **Approve by voice.** Play the original clip, let Bulbul read the rule back in the owner's language, then press *Say haan or nahi to decide* and say "हाँ" (or "ಹೌದು"). The requirement is approved with the spoken word recorded against it; the BRD shows "by voice (हाँ)". Do this once; use the buttons for the rest.
 5. **BRD + App:** "12 sections, FR-IDs, acceptance criteria, open questions." Show the **verification report**: "Anything the AI wrote that nobody said is blocked here." Switch BRD + app to हिंदी / ಕನ್ನಡ in one click. *Listen to BRD summary*. **⬇ Download**: Word (bilingual), **Jira CSV** ("the vendor gets tickets"). Click around the generated app, or the requirement simulator (move the slider below 100 kg, the alert fires).
-6. *Publish* → two **QR codes** appear: "Scan this and the BRD with the voice clips opens on your phone." Hand the laptop to a judge for the scan. Then the **WhatsApp** button (Twilio send if configured, otherwise the prefilled link).
-
-**Optional 30-second closer, if the sandbox is live:** a teammate sends a Hindi voice note to the WhatsApp number from their phone; VAANI replies with the next question as a voice note. "The owner never opens a website. The WhatsApp bot is the product; this screen is the vendor's desk."
+6. *Publish* → two **QR codes** appear: "Scan this and the BRD with the voice clips opens on your phone." Hand the laptop to a judge for the scan, or tap the **WhatsApp** link to forward it.
 
 **[3:40–4:30] Why it is different (one slide).**
 "ChatPRD, Jira Rovo and Notion take typed English from product managers and never verify. Lovable and Bolt take typed English prompts. Paytm Soundbox and Khatabook answer questions; they don't build software. Nobody interviews, verifies spoken numbers, or detects two stakeholders disagreeing." Do not name other teams in the room.

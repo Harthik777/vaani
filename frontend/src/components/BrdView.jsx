@@ -101,7 +101,7 @@ function summaryText(brd) {
 }
 
 export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, langs, lang, reset, widgets, onWidgets, metadata, share, shareUrl, targetDevice,
-  ai, onRedraft, onRegenerateApp, serverBody, sarvamVoice, onSarvamUsed, completeness, a11y, docLang, translations, onLanguage, whatsapp }) {
+  ai, onRedraft, onRegenerateApp, serverBody, sarvamVoice, onSarvamUsed, completeness, a11y, docLang, translations, onLanguage }) {
   const [listenLang, setListenLang] = useState(lang);
   const [status, setStatus] = useState(""), [busy, setBusy] = useState("");
   const stop = useRef(null);
@@ -143,6 +143,8 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
       <p>{brd.business_rules.length} approved requirements · BRD completeness {completeness ?? "n/a"}%{brd.ai_brain ? " · drafted by " + brd.ai_brain : ""}</p></div>
       <button className="btn btn-ghost" onClick={reset}>Start over</button></header>
 
+    <VendorPack brd={brd} translations={translations} evidence={evidence} />
+
     <section className="download-bar card" aria-label="Download BRD">
       <div><h2>⬇ Download BRD</h2><p className="source-note">{docLang === "english" ? "English." : `English with the ${docLabel} translation under each line (PDF, Word, Markdown).`} Jira CSV is always English, for the vendor.</p></div>
       <div className="brd-actions">
@@ -171,7 +173,6 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
       {status && <span className="source-note">{status}</span>}
     </div>
 
-    <VendorPack brd={brd} translations={translations} evidence={evidence} />
     <div className="brd-dual">
       <div className="brd-doc-column"><Document brd={brd} evidence={evidence} translations={translations} /></div>
       <aside className="brd-app-col">
@@ -180,7 +181,7 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
         {appNote && <p className="notice">{appNote}</p>}
         <button className="btn-link" disabled={!!ai.busy} onClick={onRegenerateApp}>↻ Regenerate app</button>
         <PhoneFrame screens={[]} appHtml={appHtml} appLabel={appLabel} evidence={evidence} widgets={widgets} onWidgets={onWidgets} metadata={{ ...metadata, mode: brd.mode }} shareUrl={shareUrl} previewOnly={true} targetDevice={targetDevice} />
-        {share && cloneElement(share, { whatsapp, summary: summaryText(brd), title: brd.project_name, lang })}
+        {share && cloneElement(share, { title: brd.project_name })}
       </aside>
     </div>
   </div>;
