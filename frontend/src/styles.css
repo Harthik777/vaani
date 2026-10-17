@@ -650,3 +650,25 @@ body.a11y-lowVision{font-size:19px}.a11y-lowVision .card,.a11y-lowVision .widget
   h1.big{font-size:2.2rem}.hero-points li{border-right:0;margin-right:0;border-bottom:1px solid var(--line)}
 }
 @media print{.topbar,.hero-points,.lang-pill{display:none!important}body{background:#fff}}
+
+/* ── Vendor hand-off pack ───────────────────────────────────────────── */
+.vendor-pack{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:22px 0;margin:18px 0 24px}
+.vendor-head{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-bottom:14px}
+.vendor-head h2{font-size:1.4rem;margin:0}
+.vendor-stats{display:flex;gap:0;margin:0;flex-wrap:wrap}
+.vendor-stats div{padding:0 18px;border-left:1px solid var(--line)}.vendor-stats div:first-child{border-left:0;padding-left:0}
+.vendor-stats dt{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
+.vendor-stats dd{margin:0;font-family:var(--serif);font-size:1.6rem;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink)}
+.vendor-pack .tbl{overflow-x:auto}
+.vendor-table{width:100%;border-collapse:collapse;font-size:.92rem;min-width:720px}
+.vendor-table th{text-align:left;font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line-strong)}
+.vendor-table td{vertical-align:top;padding:12px 10px;border-bottom:1px solid var(--line)}
+.vendor-table td.n{white-space:nowrap}
+.vendor-table .logic{margin-top:6px;font-size:.84rem}
+.vendor-ac{margin:0;padding-left:18px;font-size:.86rem;color:var(--body)}.vendor-ac li{margin:2px 0}
+.vp-status{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;font-weight:600;white-space:nowrap}
+.vp-verified{color:var(--teal)}.vp-needs_confirmation{color:var(--clay)}.vp-unsupported_number,.vp-rejected{color:var(--danger)}.vp-none{color:var(--mute)}
+.vendor-open{margin-top:14px;font-size:.95rem}.vendor-open ol{margin:6px 0 0 20px;color:var(--body)}
+@media print{.vendor-pack{break-inside:avoid}}
+
+.wa-send{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}.wa-send .btn{margin:8px 0}

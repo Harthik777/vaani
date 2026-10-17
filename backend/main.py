@@ -2,8 +2,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routes import extract, brd, screenspec, tts, upi, stt, evidence, portals, tickets, agent, app_gen, notes
-from services import config, llm, sarvam
+from routes import extract, brd, screenspec, tts, upi, stt, evidence, portals, tickets, agent, app_gen, notes, whatsapp as whatsapp_routes
+from services import config, llm, sarvam, whatsapp
 from services.limiter import InMemoryRateLimiter
 
 app = FastAPI(title="Vaani API")
@@ -27,7 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for module in (stt, notes, extract, agent, screenspec, brd, tts, app_gen, upi, evidence, portals, tickets):
+for module in (stt, notes, extract, agent, screenspec, brd, tts, app_gen, upi, evidence, portals, tickets, whatsapp_routes):
     app.include_router(module.router)
 
 
@@ -53,6 +53,8 @@ def health():
         },
         "payment_provider": "paytm" if config.USE_REAL_PAYTM else "upi-intent",
         "cache": config.CACHE_ENABLED,
+        "whatsapp": whatsapp.enabled(),
+        "whatsapp_media": whatsapp.enabled() and whatsapp.public_media_allowed(),
     }
 
 

@@ -185,6 +185,23 @@ function Workspace() {
       evidence: s.evidence.map(e => e.speaker === from ? { ...e, speaker: name } : e), rules: [], gaps: null });
   };
 
+  // ── Background extraction while the interview is still going: the server caches by transcript, so the
+  //    "Extract requirements" click is instant when the transcript has not changed since the last answer. ──
+  const extractPrefetched = useRef("");
+  useEffect(() => {
+    if (s.phase !== "interview" || !health?.live_llm || !s.tx.trim() || busy) return;
+    const key = s.tx + "|" + s.domain + "|" + s.mode;
+    if (extractPrefetched.current === key) return;
+    extractPrefetched.current = key;
+    (async () => {
+      try {
+        const result = await api.extract(s.tx, s.domain, s.mode, s.demo);
+        const rules = result.rules.map(r => ({ ...r, speaker: r.speaker || speakerOf(r.source_quote, s.tx) || null }));
+        if (new Set(rules.map(r => r.speaker).filter(Boolean)).size >= 2) await api.conflicts({ rules, transcript: s.tx, demo: result.demo });
+      } catch { /* best effort */ }
+    })();
+  }, [s.phase, s.tx, health?.live_llm, busy]);
+
   // ── Extraction, verification, conflicts ──
   const extract = async () => {
     setError(""); setBusy(true); invalidate({ phase: "extract", rules: [], reviewNotes: [], rejected: [], conflicts: [] });
@@ -316,7 +333,7 @@ function Workspace() {
     <div ref={heading} tabIndex="-1" className="phase-focus" aria-label={"Step " + (index + 1)} />
     {error && <div className="notice error" role="alert">{error}</div>}
     {storageError && <div className="notice" role="status">{storageError}</div>}
-    {busy && s.phase !== "interview" && <p role="status">Working…</p>}
+    {busy && s.phase !== "interview" && <p role="status" className="agent-thinking">{s.phase === "extract" ? "🧠 Extracting requirements with exact quotes, then checking for stakeholder conflicts…" : "Working…"}</p>}
 
     {s.phase === "landing" && <>
       <section className="hero">
@@ -415,7 +432,7 @@ function Workspace() {
       evidence={s.evidence} langs={LANGS} lang={s.lang} reset={reset} widgets={s.widgets} onWidgets={widgets => patch({ widgets })} metadata={metadata}
       ai={{ busy: aiBusy, error: s.aiError, stats: s.ai?.stats }} onRedraft={() => { patch({ ai: null, aiError: "", app: null, docLang: "english", translations: null }); }} onRegenerateApp={() => generateApp()}
       docLang={s.docLang} translations={s.translations} onLanguage={(docLang, translations) => { patch({ docLang, translations }); generateApp({ ...serverBody, app_language: docLang, translations: translations || {} }); }}
-      serverBody={serverBody} sarvamVoice={sarvamVoice} onSarvamUsed={markUsed} completeness={s.gaps?.completeness} a11y={s.a11y}
+      serverBody={serverBody} sarvamVoice={sarvamVoice} onSarvamUsed={markUsed} completeness={s.gaps?.completeness} a11y={s.a11y} whatsapp={!!health?.whatsapp}
       shareUrl={s.published?.preview_url || s.published?.url} share={<SharePanel published={s.published} onPublish={publish} busy={busy} mode={s.mode} />} targetDevice={s.targetDevice} />}
   </main>;
 }

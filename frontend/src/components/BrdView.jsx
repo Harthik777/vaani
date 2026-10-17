@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { cloneElement, useRef, useState } from "react";
 import { api, playClips } from "../api/client.js";
 import { toJiraCsv, toMarkdown, download, fileName } from "../data/export.js";
 import PhoneFrame, { openSandboxed } from "./PhoneFrame.jsx";
@@ -56,6 +56,35 @@ export function Document({ brd, evidence = [], portal, translations }) {
   </article>;
 }
 
+// One screen the IT vendor actually receives: every requirement with its acceptance criteria, who said it,
+// whether it was verified, plus the open questions. Prints cleanly and matches the Jira CSV.
+export function VendorPack({ brd, translations }) {
+  const rules = brd.business_rules || [];
+  const verified = rules.filter(r => r.verification?.status === "verified").length;
+  const confirm = rules.filter(r => ["needs_confirmation", "unsupported_number"].includes(r.verification?.status)).length;
+  const criteria = rules.reduce((n, r) => n + (r.acceptance?.length || 0), 0);
+  return <section className="vendor-pack" aria-label="Vendor hand-off">
+    <div className="vendor-head"><div><div className="eyebrow">Vendor hand-off</div><h2>What the IT vendor builds</h2></div>
+      <dl className="vendor-stats">
+        <div><dt>Requirements</dt><dd>{rules.length}</dd></div>
+        <div><dt>Verified against speech</dt><dd>{verified}</dd></div>
+        <div><dt>Numbers to confirm</dt><dd>{confirm}</dd></div>
+        <div><dt>Acceptance criteria</dt><dd>{criteria}</dd></div>
+        <div><dt>Open questions</dt><dd>{brd.open_questions?.length || 0}</dd></div>
+      </dl></div>
+    <div className="tbl"><table className="vendor-table">
+      <thead><tr><th>ID</th><th>Requirement</th><th>Said by</th><th>Acceptance</th><th>Status</th></tr></thead>
+      <tbody>{rules.map(r => <tr key={r.id}>
+        <td className="n"><span className="fr-id">{r.req_id}</span></td>
+        <td><b>{r.title}</b><div className="logic">{r.rule}</div>{translations?.[r.rule] && <span className="tr">{translations[r.rule]}</span>}</td>
+        <td>{r.speaker ? <span className="speaker-chip">{r.speaker}</span> : <span className="source-note">—</span>}</td>
+        <td>{r.acceptance?.length ? <ol className="vendor-ac">{r.acceptance.map((a, i) => <li key={i}>{a}</li>)}</ol> : <span className="source-note">To be written</span>}</td>
+        <td><span className={"vp-status vp-" + (r.verification?.status || "none")}>{r.verification?.status === "verified" ? "Verified" : r.verification?.status === "needs_confirmation" ? "Confirm number" : r.verification?.status === "unsupported_number" ? "Unspoken number" : r.verification?.status === "rejected" ? "Quote mismatch" : "—"}</span></td>
+      </tr>)}</tbody></table></div>
+    {!!brd.open_questions?.length && <div className="vendor-open"><b>Open questions for the client</b><ol>{brd.open_questions.map((q, i) => <li key={i}>{q}</li>)}</ol></div>}
+  </section>;
+}
+
 function summaryText(brd) {
   const items = key => (brd.sections?.[key] || []).map(i => i.text);
   return [brd.project_name + ".", ...items("executive_summary"), ...items("objectives"),
@@ -64,7 +93,7 @@ function summaryText(brd) {
 }
 
 export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, langs, lang, reset, widgets, onWidgets, metadata, share, shareUrl, targetDevice,
-  ai, onRedraft, onRegenerateApp, serverBody, sarvamVoice, onSarvamUsed, completeness, a11y, docLang, translations, onLanguage }) {
+  ai, onRedraft, onRegenerateApp, serverBody, sarvamVoice, onSarvamUsed, completeness, a11y, docLang, translations, onLanguage, whatsapp }) {
   const [listenLang, setListenLang] = useState(lang);
   const [status, setStatus] = useState(""), [busy, setBusy] = useState("");
   const stop = useRef(null);
@@ -134,6 +163,7 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
       {status && <span className="source-note">{status}</span>}
     </div>
 
+    <VendorPack brd={brd} translations={translations} />
     <div className="brd-dual">
       <div className="brd-doc-column"><Document brd={brd} evidence={evidence} translations={translations} /></div>
       <aside className="brd-app-col">
@@ -142,7 +172,7 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
         {appNote && <p className="notice">{appNote}</p>}
         <button className="btn-link" disabled={!!ai.busy} onClick={onRegenerateApp}>↻ Regenerate app</button>
         <PhoneFrame screens={[]} appHtml={appHtml} appLabel={appLabel} evidence={evidence} widgets={widgets} onWidgets={onWidgets} metadata={{ ...metadata, mode: brd.mode }} shareUrl={shareUrl} previewOnly={true} targetDevice={targetDevice} />
-        {share}
+        {share && cloneElement(share, { whatsapp, summary: summaryText(brd), title: brd.project_name, lang })}
       </aside>
     </div>
   </div>;

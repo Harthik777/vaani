@@ -62,6 +62,7 @@ SARVAM_TRANSLATE_MODEL = os.getenv("SARVAM_TRANSLATE_MODEL", "sarvam-translate:v
 SARVAM_LLM_MODEL = os.getenv("SARVAM_LLM_MODEL", "sarvam-105b-conversations")
 SARVAM_LLM_MAX_TOKENS = int(os.getenv("SARVAM_LLM_MAX_TOKENS", "3000"))  # Starter plan caps at 4096; reasoning counts
 SARVAM_LLM_TIMEOUT = float(os.getenv("SARVAM_LLM_TIMEOUT", "30"))
+SARVAM_REALTIME = os.getenv("SARVAM_REALTIME", "off").strip().lower() in {"on", "true", "1"}  # streaming STT websocket relay
 CACHE_ENABLED = os.getenv("VAANI_CACHE", "on").strip().lower() not in {"off", "false", "0"}
 
 # LLM_PROVIDER=sarvam makes Sarvam's own chat model the main brain (no second key needed).
@@ -73,6 +74,9 @@ if os.getenv("LLM_PROVIDER", "").strip().lower() == "sarvam" and SARVAM_API_KEY:
 # falling back to the main LLM on any failure. A circuit breaker (services.sarvam) stops waiting on it after
 # two consecutive failures, so a bad key or outage costs at most two short timeouts.
 AGENT_LLM = os.getenv("AGENT_LLM", "sarvam").strip().lower()
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "").strip()
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "").strip()
+TWILIO_WHATSAPP_FROM = os.getenv("TWILIO_WHATSAPP_FROM", "").strip()
 PAYTM_MID = os.getenv("PAYTM_MID", "")
 PAYTM_KEY = os.getenv("PAYTM_KEY", "")
 PAYTM_ENV = os.getenv("PAYTM_ENV", "staging")

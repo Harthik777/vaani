@@ -19,6 +19,12 @@ export default function Interview({ gaps, busy, lang, langLabel, a11y, sarvamVoi
     const text = q.question_local || q.question;
     try {
       if (!sarvamVoice) { speak(text, q.question_local ? lang : "english"); setVoiceMessage("Browser voice (Sarvam voice is not configured)."); setSpeaking(false); return; }
+      // The gap check already prepared Bulbul audio for the first question: no second round trip.
+      if (gaps?.first_audio?.length && gaps.questions?.[0]?.key === q.key) {
+        onVoiceUsed?.(!!q.question_local);
+        stop.current = playClips(gaps.first_audio, error => { setSpeaking(false); if (error) setVoiceMessage(error.message); });
+        return;
+      }
       // A translated question is spoken as-is; otherwise Sarvam translates the English question first.
       const result = await api.tts({ text, lang, translate: !q.question_local && lang !== "english" });
       onVoiceUsed?.(result.translated);
@@ -27,6 +33,8 @@ export default function Interview({ gaps, busy, lang, langLabel, a11y, sarvamVoi
   };
   useEffect(() => { if (autoAsk && current && !busy) ask(current); return () => stop.current?.(); }, [current?.key, current?.question_local, busy]);
 
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => { if (!busy) { setElapsed(0); return; } const t0 = Date.now(); const iv = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 1000); return () => clearInterval(iv); }, [busy]);
   const items = (gaps?.items || []).map(i => i.status === "missing" && skipped.includes(i.key) ? { ...i, status: "skipped" } : i);
   const pct = gaps?.completeness ?? 0;
   return <section className="interview">
@@ -40,7 +48,7 @@ export default function Interview({ gaps, busy, lang, langLabel, a11y, sarvamVoi
           {i.source_quote && <q>{i.source_quote}</q>}</span></li>)}</ul>
     </div>
 
-    {busy && <p role="status" className="agent-thinking">🧠 The agent is reading everything said so far…</p>}
+    {busy && <p role="status" className="agent-thinking">🧠 The agent is reading everything said so far… {elapsed > 2 ? `${elapsed}s · ` : ""}{elapsed < 4 ? "checking the 8 things a BRD needs" : elapsed < 9 ? "writing follow-up questions in your language" : "almost there"}</p>}
     {!busy && !gaps && <div className="card"><p>The agent has not checked this transcript yet.</p><button className="btn btn-primary" onClick={onRetry}>Check what is missing</button></div>}
 
     {!busy && current && <article className="card question-card" aria-live="polite">

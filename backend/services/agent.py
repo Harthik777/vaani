@@ -3,6 +3,7 @@
 Every claim the LLM makes is checked: a checklist item counts as covered only if the model
 quotes the exact words that cover it, and a conflict must name two real requirements.
 """
+import asyncio
 import json
 import math
 from services import llm, sarvam
@@ -60,17 +61,32 @@ def meeting_language(transcript):
 
 
 async def localize(questions, lang):
-    """Questions are written in English, then translated with Sarvam Translate. Returns (questions, used_sarvam)."""
+    """Questions are written in English, then translated with Sarvam Translate, all in parallel.
+    Returns (questions, used_sarvam)."""
     if lang == "english" or not sarvam.enabled():
         return questions, False
+    results = await asyncio.gather(*(sarvam.translate(q["question"], lang) for q in questions), return_exceptions=True)
     used = False
-    for q in questions:
-        try:
-            q["question_local"] = await sarvam.translate(q["question"], lang)
-            used = True
-        except Exception:
+    for q, r in zip(questions, results):
+        if isinstance(r, Exception):
             q["question_local"] = None
+        else:
+            q["question_local"] = r
+            used = True
     return questions, used
+
+
+async def first_question_audio(questions, lang):
+    """Bulbul audio for the first question, prepared server-side so the agent speaks the moment the
+    screen appears instead of after a second round trip. Best effort: None on any failure."""
+    if not questions or not sarvam.enabled():
+        return None
+    q = questions[0]
+    text = q.get("question_local") or q["question"]
+    try:
+        return await sarvam.synthesize(text, lang if q.get("question_local") or lang == "english" else "english")
+    except Exception:
+        return None
 
 
 async def assess(transcript, mode, lang, answered, demo):
@@ -104,12 +120,14 @@ async def assess(transcript, mode, lang, answered, demo):
             items.append({"key": key, "label": c["label"], "status": "missing", "source_quote": None})
             questions.append({"key": key, "label": c["label"], "question": found.get("question") or c["question"], "question_local": None})
     questions, translated = await localize(questions, lang)
+    first_audio = await first_question_audio(questions, lang)
     done = sum(1 for i in items if i["status"] != "missing")
     return {
         "items": items, "questions": questions, "completeness": math.floor(100 * done / len(CHECKLIST) + 0.5),
         "brain": brain or "checklist only (no AI configured)", "translated_with_sarvam": translated,
         "ai_checked": brain is not None,
         "sample_answers": mocks.MEETING["sample_answers"].get(meeting or "", {}) if meeting else {},
+        "first_audio": first_audio,
     }
 
 

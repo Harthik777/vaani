@@ -108,6 +108,7 @@ export const api = {
       : request("/api/evidence/" + evidence.id, { key: evidence.key, binary: true });
   },
   publish: (body, key) => post("/api/portals", body, { key }),
+  whatsapp: body => post("/api/whatsapp/send", body, { timeout: 60000 }),
   portal: (id, key) => request("/api/portals/" + id, { key }),
   ticket: body => post("/api/tickets", body),
   upiLink: body => post("/api/upi/link", body),
