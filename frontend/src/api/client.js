@@ -58,11 +58,11 @@ export const api = {
     }
   },
   async gaps(body) {
-    try { return await post("/api/agent/gaps", body, { timeout: 90000 }); }
+    try { return await post("/api/agent/gaps", body, { timeout: 45000 }); }
     catch (e) { if (e.offline) return localDemoGaps(body.transcript, body.answered); throw e; }
   },
   async conflicts(body) {
-    try { return await post("/api/agent/conflicts", body, { timeout: 90000 }); }
+    try { return await post("/api/agent/conflicts", body, { timeout: 45000 }); }
     catch (e) {
       if (e.offline && body.demo && meetingLanguage(body.transcript)) {
         const ids = new Set(body.rules.map(r => r.id));
@@ -71,17 +71,14 @@ export const api = {
       throw e;
     }
   },
-  draftBrd: body => post("/api/brd/draft", body, { timeout: 150000 }),
-  generateApp: body => post("/api/app/generate", body, { timeout: 150000 }),
+  draftBrd: body => post("/api/brd/draft", body, { timeout: 100000 }),
+  generateApp: body => post("/api/app/generate", body, { timeout: 100000 }),
   docx: body => request("/api/brd/docx", { method: "POST", body, binary: true }),
   pdf: body => request("/api/brd/pdf", { method: "POST", body, binary: true, timeout: 90000 }),
   xlsx: body => request("/api/brd/xlsx", { method: "POST", body, binary: true }),
   email: body => post("/api/brd/email", body, { timeout: 90000 }),
-  pdf: body => request("/api/brd/pdf", { method: "POST", body, binary: true, timeout: 90000 }),
-  xlsx: body => request("/api/brd/xlsx", { method: "POST", body, binary: true }),
-  email: body => post("/api/brd/email", body, { timeout: 90000 }),
   tts: body => post("/api/tts", body, { timeout: 60000 }),
-  translate: body => post("/api/translate", body, { timeout: 120000 }),
+  translate: body => post("/api/translate", body, { timeout: 60000 }),
   async transcribe(blob, lang, mode, keyterms = []) {
     const body = new FormData();
     body.append("audio", blob, blob.type.includes("mp4") ? "recording.mp4" : "recording.webm");

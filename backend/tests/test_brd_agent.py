@@ -251,7 +251,7 @@ class AppLanguageTests(Patched):
         return {"mode": "business", "rules": rules, "transcript": EN, "app_language": language}
 
     def test_simulator_is_translated_with_sarvam(self):
-        async def fake_translate(text, target, source="english"):
+        async def fake_translate(text, target, source="english", client=None):
             return "HI:" + text
         self.with_patches(patch.object(config, "USE_REAL_LLM", False), patch.object(config, "USE_REAL_SARVAM", True),
                           patch.object(config, "SARVAM_API_KEY", "k"), patch.object(sarvam, "translate", new=fake_translate))

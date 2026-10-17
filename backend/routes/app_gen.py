@@ -31,13 +31,7 @@ def looks_like_html(html):
 
 async def translate_many(texts, language):
     """Sarvam Translate, de-duplicated, at most 4 requests in flight. Returns {english: translated}."""
-    unique = [t for t in dict.fromkeys(texts) if t and t.strip()]
-    out = {}
-    for start in range(0, len(unique), 4):
-        batch = unique[start:start + 4]
-        for text, translated in zip(batch, await asyncio.gather(*(sarvam.translate(t, language) for t in batch))):
-            out[text] = translated
-    return out
+    return await sarvam.translate_many(texts, language)
 
 
 async def fallback(body):

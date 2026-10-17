@@ -733,3 +733,9 @@ body.a11y-lowVision{font-size:19px}.a11y-lowVision .card,.a11y-lowVision .widget
 @media print{.demo-caption,.demo-play{display:none!important}}
 
 .email-form{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}.email-row{display:flex;gap:8px;align-items:center}.email-row input{margin:0;flex:1}
+
+/* ── Fast approval + background build note ──────────────────────── */
+.fast-approve{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin-top:14px}
+.fast-approve>div{flex:1 1 320px}.fast-approve h2{font-size:1.1rem;margin:0 0 4px}
+.fast-approve label{flex:1 1 200px}.fast-approve .btn{white-space:nowrap}
+.prefetch-note{font-style:italic}

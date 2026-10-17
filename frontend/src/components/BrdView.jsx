@@ -101,7 +101,7 @@ function summaryText(brd) {
 }
 
 export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, langs, lang, reset, widgets, onWidgets, metadata, share, shareUrl, targetDevice,
-  ai, onRedraft, onRegenerateApp, serverBody, sarvamVoice, onSarvamUsed, completeness, a11y, docLang, translations, onLanguage, emailEnabled }) {
+  ai, onRedraft, onRegenerateApp, serverBody, sarvamVoice, onSarvamUsed, completeness, a11y, docLang, translations, onLanguage, langBusy, emailEnabled }) {
   const [listenLang, setListenLang] = useState(lang);
   const [status, setStatus] = useState(""), [busy, setBusy] = useState("");
   const stop = useRef(null);
@@ -117,21 +117,14 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
     } catch (e) { setBusy(""); setStatus(e.message); }
   };
   const docLabel = langs.find(([c]) => c === docLang)?.[1] || "English";
-  // One switch for both: the BRD gets Sarvam translations under each English line, and the app is rebuilt in that language.
+  // One switch for both: the BRD gets Sarvam translations under each English line, and the app switches language.
+  // Translations and apps are cached per language, and the session language is prepared in the background.
   const switchLanguage = async () => {
-    if (listenLang === "english") { onLanguage("english", null); setStatus("BRD and app switched back to English."); return; }
-    setBusy("translate"); setStatus("");
-    const texts = [...new Set([...Object.values(brd.sections || {}).flat().map(i => i.text), ...brd.business_rules.map(r => r.rule), ...(brd.open_questions || [])])];
+    setStatus("");
     try {
-      const map = {};
-      for (let i = 0; i < texts.length; i += 40) {
-        const batch = texts.slice(i, i + 40);
-        const { translations: out } = await api.translate({ texts: batch, target: listenLang });
-        batch.forEach((t, j) => { map[t] = out[j]; });
-      }
-      onLanguage(listenLang, map); onSarvamUsed({ translate: true });
-      setStatus(`BRD shown in ${listenLabel} (${texts.length} lines, Sarvam Translate; English stays the reference). The app is being rebuilt in ${listenLabel}.`);
-    } catch (e) { setStatus(e.message); } finally { setBusy(""); }
+      const lines = await onLanguage(listenLang);
+      setStatus(listenLang === "english" ? "BRD and app switched back to English." : `BRD shown in ${listenLabel} (${lines} lines, Sarvam Translate; English stays the reference).`);
+    } catch (e) { setStatus(e.message); }
   };
   const word = async () => {
     setBusy("docx"); setStatus("");
@@ -191,8 +184,8 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
 
     <div className="listen-bar card">
       <label>Language<select value={listenLang} onChange={e => setListenLang(e.target.value)}>{langs.map(([c, label]) => <option key={c} value={c}>{label}</option>)}</select></label>
-      <button className="btn btn-primary" disabled={(!sarvamVoice && listenLang !== "english") || listenLang === docLang || busy === "translate" || !!ai.busy} onClick={switchLanguage}>
-        🌐 {busy === "translate" ? "Translating…" : listenLang === docLang ? `BRD + app in ${docLabel}` : `Switch BRD + app to ${listenLabel}`}</button>
+      <button className="btn btn-primary" disabled={(!sarvamVoice && listenLang !== "english") || listenLang === docLang || langBusy} onClick={switchLanguage}>
+        🌐 {langBusy ? "Translating…" : listenLang === docLang ? `BRD + app in ${docLabel}` : `Switch BRD + app to ${listenLabel}`}</button>
       {a11y !== "deaf" && <button className="btn btn-ghost" disabled={!sarvamVoice || busy === "listen"} onClick={listen}>🔊 {busy === "listen" ? "Playing…" : "Listen to BRD summary"}</button>}
       {busy === "listen" && <button className="btn btn-ghost" onClick={() => { stop.current?.(); setBusy(""); }}>Stop</button>}
       {!sarvamVoice && <span className="source-note">Sarvam is not configured, so voice and translation are unavailable.</span>}

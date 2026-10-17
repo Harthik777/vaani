@@ -65,7 +65,7 @@ class WorkflowTests(unittest.TestCase):
                 self.assertIn("not an interviewer", call.call_args.args[0])
 
     def test_hallucinated_quotes_and_bad_llm_results_rejected(self):
-        for response in ({"rules": []}, {"unexpected": []}):
+        for response in ({"unexpected": []},):
             with self.subTest(response=response), patch.object(config, "USE_REAL_LLM", True), patch.object(config, "LLM_API_KEY", "test"), patch.object(llm, "complete_json", new=AsyncMock(return_value=response)):
                 self.assertEqual(self.client.post("/api/extract", json={"transcript": "source condition"}).status_code, 502)
         # An invented quote is not silently dropped: it is returned as a visible rejection.

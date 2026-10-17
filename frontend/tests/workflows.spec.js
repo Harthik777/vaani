@@ -257,3 +257,33 @@ test("Real MediaRecorder retains original audio and reload restores playback", a
   expect(await page.getByLabel("Transcript", { exact: true }).inputValue()).toBe("");
   await context.close();
 });
+
+test("Fast approval takes verified rules in one step and a new transcript drops demo identity", async ({ page }) => {
+  await start(page, "business", "English");
+  await page.getByRole("button", { name: "Use 2-speaker meeting demo" }).click();
+  await page.getByRole("button", { name: /Next: agent checks for gaps/ }).click();
+  await expect(page.locator(".meter-pct")).toHaveText("38%");
+  await page.getByRole("button", { name: "Extract requirements →" }).click();
+  // Two rules are in an unresolved conflict: they stay for individual review.
+  const fast = page.locator(".fast-approve").getByRole("button", { name: /^Approve/ });
+  await expect(fast).toHaveText(/Approve 3 verified · review 2 flagged/);
+  await page.locator(".conflict-card").getByRole("button", { name: "Keep Manager's version" }).click();
+  await expect(fast).toHaveText(/Approve 4 verified →/);
+  await fast.click();
+  await expect(page.getByRole("button", { name: "PDF", exact: true })).toBeVisible();
+  const doc = page.locator(".brd-doc");
+  await expect(doc).toContainText("FR-04");
+  await expect(doc).toContainText("Approved by Demo reviewer");
+  const session = () => page.evaluate(() => JSON.parse(sessionStorage.getItem("vaani_session")));
+  expect((await session()).approved.map(r => r.approved_by)).toEqual(["Demo reviewer", "Demo reviewer", "Demo reviewer", "Demo reviewer"]);
+  // A new transcript in the same tab: demo title, owner, reviewer and answers must not leak into the next BRD.
+  for (let i = 0; i < 4; i++) await page.getByRole("button", { name: "Back", exact: false }).click();
+  if (!(await page.locator(".tx-edit").evaluate(e => e.open))) await page.getByText("Edit the words", { exact: true }).click();
+  await page.getByLabel("Transcript", { exact: true }).fill("[Owner] Jab bill 5000 se upar ho to manager ko call karo.");
+  const s = await session();
+  expect(s.demo).toBe(false);
+  expect(s.answers).toEqual([]);
+  expect(s.approved).toEqual([]);
+  expect(Object.values(s.metadata).some(v => /Demo|Spice/i.test(String(v)))).toBe(false);
+  expect(s.domain).not.toMatch(/spice/i);
+});

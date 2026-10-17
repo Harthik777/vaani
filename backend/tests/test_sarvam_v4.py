@@ -125,7 +125,7 @@ class SarvamV4Tests(unittest.TestCase):
              patch.object(llm, "_gemini_generate", AsyncMock(return_value='{"conflicts": []}')):
             result, brain = asyncio.run(llm.agent_json("prompt", system="sys", schema={"type": "object"}))
         self.assertEqual(result, {"conflicts": []})
-        self.assertEqual(brain, "gemini:" + config.LLM_MODEL)
+        self.assertEqual(brain, "gemini:" + config.LLM_FAST_MODEL)  # the agent's fallback is the fast model
 
     def test_agent_uses_sarvam_when_it_answers(self):
         good = fake_client({"choices": [{"message": {"content": '{"conflicts": []}'}, "finish_reason": "stop"}]})

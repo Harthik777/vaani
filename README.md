@@ -81,15 +81,15 @@ Last run (17 Oct 2026): verifier 66/66 planted errors caught, 0 false blocks on 
 ## Tests
 ```bash
 cd Vaani_code/vaani-repo/backend
-python -m unittest tests/test_workflows.py tests/test_brd_agent.py tests/test_sarvam_v4.py tests/test_meeting_notes.py tests/test_clarity_breadth.py tests/test_help.py tests/test_exports.py
+python -m unittest discover -s tests -p "test_*.py"
 ```
-83 tests cover the verifier, agent, conflicts, BRD drafting, exports, Sarvam request shapes (v4 codemix and keyterms, v4-flash voices, the 105B request that answers, the cache, the circuit breaker, Kannada, meeting diarization and Doc AI notes) and access control.
+86 tests cover the verifier, agent, conflicts, BRD drafting, exports, the session-leak and speed fixes from the real test, Sarvam request shapes (v4 codemix and keyterms, v4-flash voices, the 105B request that answers, the cache, the circuit breaker, Kannada, meeting diarization and Doc AI notes) and access control.
 
 ```bash
 cd Vaani_code/vaani-repo/frontend
 npx playwright test
 ```
-12 end-to-end flows run in a real browser. Use `PW_WEB_PORT=5174 PW_API_PORT=8001` if the dev servers are already running, `PW_PYTHON` to point at the interpreter that has the backend requirements, `PW_AUDIT_DIR` for screenshots and PDFs (default `../../../audit`), and `PLAYWRIGHT_BROWSERS_PATH` to point at the bundled browsers.
+13 end-to-end flows run in a real browser (including fast approval and the session-isolation check). Use `PW_WEB_PORT=5174 PW_API_PORT=8001` if the dev servers are already running, `PW_PYTHON` to point at the interpreter that has the backend requirements, `PW_AUDIT_DIR` for screenshots and PDFs (default `../../../audit`), and `PLAYWRIGHT_BROWSERS_PATH` to point at the bundled browsers.
 
 ## Honest limitations
 - Live AI steps take time: about 4 s for the gap check (Sarvam 105B), 15 s for extraction, 35 s for BRD drafting and 17 s for app generation (measured 2026-10-17). The BRD page pre-drafts in the background while you approve, and results are cached, so a rehearsed run is instant.

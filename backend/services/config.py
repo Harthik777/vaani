@@ -25,8 +25,8 @@ LLM_PROVIDER = "custom" if _raw_url else "none"
 if not _raw_url:
     if _norm_model.startswith("gemini") or LLM_API_KEY.startswith("AIzaSy") or LLM_API_KEY.startswith("AQ."):
         _raw_url = "https://generativelanguage.googleapis.com/v1beta/models"
-        if not _norm_model or _norm_model in {"gemini-2.5-pro", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-pro"}:
-            _norm_model = "gemini-3.5-flash"
+        if not _norm_model or _norm_model in {"gemini-2.5-pro", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-pro", "gemini-3.5-flash", "gemini-3.6-flash"}:
+            _norm_model = "gemini-3.8-flash"
         _raw_model = _norm_model
         LLM_PROVIDER = "gemini"
     elif LLM_API_KEY.startswith("gsk_"):
@@ -52,6 +52,12 @@ if not _raw_url:
 
 LLM_URL = _raw_url
 LLM_MODEL = _norm_model or _raw_model or "gpt-4o-mini"
+# Speed (teammate's measurements, 17 Oct): short structured tasks (gap check, extraction + conflicts) use the fast model;
+# long writing (BRD draft, app) uses LLM_MODEL with thinking set to low.
+LLM_FAST_MODEL = os.getenv("LLM_FAST_MODEL", "gemini-3.5-flash-lite").strip().lower()
+LLM_THINKING = os.getenv("LLM_THINKING", "low").strip().lower()
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "45"))        # seconds per model call before trying the next model
+TRANSLATE_CONCURRENCY = int(os.getenv("TRANSLATE_CONCURRENCY", "10"))  # 10 is safe; 40 hit Sarvam's 429 rate limit
 # Sarvam models (checked against docs.sarvam.ai on 2026-10-17): saaras:v4 is the current STT default,
 # bulbul:v4-flash the recommended TTS model, sarvam-105b-conversations the 32K chat model built for short turns.
 SARVAM_STT_MODEL = os.getenv("SARVAM_STT_MODEL", "saaras:v4")
@@ -61,8 +67,7 @@ SARVAM_TTS_SPEAKER = os.getenv("SARVAM_TTS_SPEAKER", "").strip()  # blank = per-
 SARVAM_TRANSLATE_MODEL = os.getenv("SARVAM_TRANSLATE_MODEL", "sarvam-translate:v1")
 SARVAM_LLM_MODEL = os.getenv("SARVAM_LLM_MODEL", "sarvam-105b-conversations")
 SARVAM_LLM_MAX_TOKENS = int(os.getenv("SARVAM_LLM_MAX_TOKENS", "3000"))  # Starter plan caps at 4096; reasoning counts
-SARVAM_LLM_TIMEOUT = float(os.getenv("SARVAM_LLM_TIMEOUT", "30"))
-SARVAM_REALTIME = os.getenv("SARVAM_REALTIME", "off").strip().lower() in {"on", "true", "1"}  # streaming STT websocket relay
+SARVAM_LLM_TIMEOUT = float(os.getenv("SARVAM_LLM_TIMEOUT", "8"))
 CACHE_ENABLED = os.getenv("VAANI_CACHE", "on").strip().lower() not in {"off", "false", "0"}
 
 # LLM_PROVIDER=sarvam makes Sarvam's own chat model the main brain (no second key needed).

@@ -4,7 +4,7 @@ import { api, playClips, speak } from "../api/client.js";
 const ICON = { covered: "✅", answered: "🗣️", missing: "⬜", skipped: "⏭️" };
 
 // The BRD agent: shows what is already covered (with the exact words), asks for what is missing, by voice.
-export default function Interview({ gaps, busy, lang, langLabel, a11y, sarvamVoice, recorder, draft, onDraft, skipped, onSave, onSkip, onRetry, onContinue, onVoiceUsed, demo, keyterms = [] }) {
+export default function Interview({ gaps, busy, rechecking, lang, langLabel, a11y, sarvamVoice, recorder, draft, onDraft, skipped, onSave, onSkip, onRetry, onContinue, onVoiceUsed, demo, keyterms = [] }) {
   const [voiceMessage, setVoiceMessage] = useState("");
   const [speaking, setSpeaking] = useState(false);
   const [autoAsk, setAutoAsk] = useState(a11y !== "deaf");
@@ -40,7 +40,7 @@ export default function Interview({ gaps, busy, lang, langLabel, a11y, sarvamVoi
   return <section className="interview">
     <div className="meter-card card">
       <div className="meter-head"><div><div className="eyebrow">BRD completeness</div><strong className="meter-pct">{gaps ? pct + "%" : "…"}</strong></div>
-        <p className="source-note">Checked by: {gaps?.brain || "…"}{gaps?.translated_with_sarvam ? " · questions translated with Sarvam Translate" : ""}</p></div>
+        <p className="source-note">Checked by: {gaps?.brain || "…"}{gaps?.translated_with_sarvam ? " · questions translated with Sarvam Translate" : ""}{rechecking ? " · 🔄 re-checking your answer in the background" : ""}</p></div>
       <div className="meter" role="progressbar" aria-label="BRD completeness" aria-valuenow={pct} aria-valuemin="0" aria-valuemax="100"><span style={{ width: pct + "%" }} /></div>
       {gaps?.warning && <p className="notice">{gaps.warning}</p>}
       <ul className="checklist-grid">{items.map(i => <li key={i.key} className={"ck ck-" + i.status}>

@@ -11,3 +11,7 @@ playwright-report/
 
 backend/benchmark.json
 frontend/test-results/
+*.env
+**/.env
+backend/.env
+frontend/test-output/

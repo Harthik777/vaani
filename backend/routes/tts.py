@@ -37,6 +37,8 @@ async def tts(body: TtsIn):
         audios = await sarvam.synthesize(text, body.lang, dict_id)
         return {"text": text, "audios": audios, "provider": "sarvam", "translated": body.translate and body.lang != "english"}
     except Exception as exc:
+        if isinstance(exc, sarvam.SarvamError):
+            raise HTTPException(exc.status, str(exc)) from exc
         raise HTTPException(502, "Sarvam voice failed. Retry, or read the text on screen.") from exc
 
 
@@ -44,12 +46,11 @@ async def tts(body: TtsIn):
 async def translate(body: TranslateIn):
     _require_sarvam()
     try:
-        results = []
-        for start in range(0, len(body.texts), 4):  # at most 4 requests in flight
-            batch = body.texts[start:start + 4]
-            results += await asyncio.gather(*(sarvam.translate(t, body.target) for t in batch))
-        return {"translations": results, "provider": "sarvam"}
+        done = await sarvam.translate_many(body.texts, body.target)  # shared connection, 10 in parallel
+        return {"translations": [done.get(t, t) for t in body.texts], "provider": "sarvam"}
     except Exception as exc:
+        if isinstance(exc, sarvam.SarvamError):
+            raise HTTPException(exc.status, str(exc)) from exc
         raise HTTPException(502, "Sarvam Translate failed. Retry in a moment.") from exc
 
 
@@ -64,4 +65,6 @@ async def transliterate(body: TransliterateIn):
         out = await sarvam.transliterate(body.text, body.target)
         return {"text": out, "changed": out != body.text, "provider": "sarvam transliterate"}
     except Exception as exc:
+        if isinstance(exc, sarvam.SarvamError):
+            raise HTTPException(exc.status, str(exc)) from exc
         raise HTTPException(502, "Sarvam transliteration failed. Retry, or keep the text as typed.") from exc

@@ -32,6 +32,31 @@ const spokenDecision = text => {
   return no ? "no" : yes ? "yes" : null;
 };
 const DEMO_OWNER = { kannada: "Spice wholesaler, K.R. Market, Bengaluru", hindi: "Spice wholesaler, Indore" };
+// Order-independent fingerprint of an exact rule set: drafts and apps are reused only for the input they were made for.
+const ruleKey = rules => rules.map(r => [r.id, r.title, r.condition, r.action, r.exception || ""].join("|")).sort().join("~");
+const textKey = text => { let h = 5381; for (let i = 0; i < (text || "").length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0; return h.toString(36) + ":" + (text || "").length; };
+// Show an answer as done immediately; the AI re-check runs in the background.
+const applyAnswered = (gaps, keys) => {
+  if (!gaps) return gaps;
+  const answered = new Set(keys);
+  const items = gaps.items.map(i => answered.has(i.key) && i.status === "missing" ? { ...i, status: "answered" } : i);
+  const done = items.filter(i => i.status !== "missing").length;
+  return { ...gaps, items, questions: gaps.questions.filter(q => !answered.has(q.key)), completeness: Math.round(100 * done / items.length) };
+};
+// When the transcript changes, keep only what is still grounded in it. In the real test of 17 Oct, interview
+// answers and the demo's title/owner/domain survived a new transcript and leaked into the next BRD and app.
+const isDemoValue = v => typeof v === "string" && (
+  v.startsWith("Demo · ") || v === "Demo reviewer" || Object.values(DEMO_OWNER).includes(v) ||
+  v === MEETING.title || v === MEETING.domain || v.toLowerCase().includes("spice wholesale")
+);
+const groundedTo = (p, tx) => ({
+  answers: p.answers.filter(a => (a.answer || "").trim() && tx.includes(a.answer.trim())),
+  evidence: p.evidence.filter(e => !e.transcript || tx.includes(e.transcript.trim())),
+  skipped: [], gaps: null, conflicts: [], rejected: [], draftAnswer: "", queue: [],
+  metadata: Object.fromEntries(Object.entries(p.metadata || {}).filter(([, v]) => !isDemoValue(v))),
+  domain: isDemoValue(p.domain) || p.demo ? MODE_DOMAIN[p.mode] : (p.domain || MODE_DOMAIN[p.mode]),
+});
+const cleanMetadata = p => Object.fromEntries(Object.entries(p.metadata || {}).filter(([, v]) => !isDemoValue(v)));
 const lineParts = line => { const m = line.match(/^\[([^\]]{1,60})\]\s*([\s\S]*)$/); return m ? { speaker: m[1], text: m[2] } : { speaker: null, text: line }; };
 // Saaras v4 keyterms: names, products and units already known in this session bias speech recognition.
 function keytermsFor(s) {
@@ -46,7 +71,8 @@ const fresh = (mode = "business", lang = "hindi", a11y = "standard", targetDevic
   version: 3, phase: "landing", mode, lang, a11y, targetDevice, tx: "", rules: [], approved: [], soIdx: 0,
   evidence: [], metadata: {}, widgets: {}, demo: false, reviewNotes: [], published: null, domain: MODE_DOMAIN[mode],
   speakers: ["Owner"], speaker: "Owner", answers: [], skipped: [], gaps: null, draftAnswer: "", conflicts: [], rejected: [],
-  extractBrain: null, ai: null, aiError: "", app: null, sarvamUsed: {}, docLang: "english", translations: null, voiceHeard: null,
+  extractBrain: null, ai: null, aiError: "", aiErrorKey: null, app: null, sarvamUsed: {}, docLang: "english", translations: null, voiceHeard: null,
+  queue: [], appCache: {}, trCache: {},
 });
 function restore() {
   try {
@@ -55,7 +81,8 @@ function restore() {
     if (!Array.isArray(value.rules) || !Array.isArray(value.approved) || !Array.isArray(value.evidence) || typeof value.tx !== "string") return fresh();
     if (value.rules.some(r => !r || typeof r.id !== "string" || typeof r.action !== "string")) return fresh();
     const state = { ...fresh(), ...value };
-    state.soIdx = Math.min(Math.max(0, state.soIdx || 0), Math.max(0, state.rules.length - 1));
+    const queueLen = Array.isArray(state.queue) && state.queue.length ? state.queue.length : state.rules.length;
+    state.soIdx = Math.min(Math.max(0, state.soIdx || 0), Math.max(0, queueLen - 1));
     if (state.phase === "signoff" && !state.rules.length) state.phase = "extract";
     return state;
   } catch { return fresh(); }
@@ -86,7 +113,8 @@ function SarvamStrip({ health, used }) {
 
 function Workspace() {
   const [s, set] = useState(restore), [error, setError] = useState(""), [busy, setBusy] = useState(false), [storageError, setStorageError] = useState("");
-  const [health, setHealth] = useState(null), [aiBusy, setAiBusy] = useState(""), [uploading, setUploading] = useState("");
+  const [health, setHealth] = useState(null), [uploading, setUploading] = useState("");
+  const [pending, setPending] = useState([]), [rechecking, setRechecking] = useState(false), [langBusy, setLangBusy] = useState(false);
   // The transcript box stays open while there is nothing to show and in Deaf/HoH mode; otherwise the feed is the view.
   const [txOpen, setTxOpen] = useState(() => !s.tx.trim() || s.a11y === "deaf");
   useEffect(() => { setTxOpen(!s.tx.trim() || s.a11y === "deaf"); }, [s.tx.trim() === "", s.a11y, s.phase]);
@@ -94,11 +122,14 @@ function Workspace() {
   const reviewView = s.reviewView || "owner", editing = s.editing || [];
   const setReviewView = v => patch({ reviewView: v });
   const setEditing = fn => patch({ editing: typeof fn === "function" ? fn(editing) : fn });
-  const prefetched = useRef("");
-  const heading = useRef(null), requestVersion = useRef(0), active = useRef(true), drafting = useRef(false);
+  const heading = useRef(null), requestVersion = useRef(0), gapVersion = useRef(0), active = useRef(true), pendingRef = useRef(new Set());
   const stateRef = useRef(null); stateRef.current = s;
   const patch = value => set(p => ({ ...p, ...value }));
-  const invalidate = value => set(p => ({ ...p, ...value, approved: [], soIdx: 0, published: null, widgets: {}, ai: null, aiError: "", app: null, docLang: "english", translations: null }));
+  const invalidate = value => set(p => ({ ...p, ...value, approved: [], soIdx: 0, published: null, widgets: {}, ai: null, aiError: "", aiErrorKey: null, app: null,
+    docLang: "english", translations: null, queue: [], appCache: {}, trCache: {} }));
+  // A new or edited transcript: also drop answers, recordings and demo identity that are no longer in it.
+  const replaceTranscript = (tx, extra = {}) => set(p => ({ ...p, ...groundedTo(p, tx), tx, rules: [], demo: false, approved: [], soIdx: 0, published: null, widgets: {},
+    ai: null, aiError: "", aiErrorKey: null, app: null, docLang: "english", translations: null, queue: [], appCache: {}, trCache: {}, ...extra }));
   const markUsed = flags => set(p => ({ ...p, sarvamUsed: { ...p.sarvamUsed, ...Object.fromEntries(Object.entries(flags).filter(([, v]) => v)) } }));
   const recorder = useRecorder({
     lang: s.lang, mode: s.mode, keyterms: keytermsFor(s),
@@ -133,35 +164,45 @@ function Workspace() {
   const approved = s.approved;
   const sarvamVoice = !!health?.live_stt;
   const currentRules = s.phase === "brd" ? approved : s.rules;
+  // Everything the BRD depends on. A draft or app is shown only if it was made for exactly this input.
+  const draftKey = rules => ruleKey(rules) + "#" + textKey(s.tx) + "#" + textKey(JSON.stringify(s.answers.map(a => [a.key, a.answer])));
+  const approvedKey = draftKey(approved);
+  const aiCurrent = s.ai?.key === approvedKey ? s.ai : null;
+  const currentApp = s.appCache[approvedKey + "|" + s.docLang] || null;
   const docInput = { rules: currentRules, mode: s.mode, metadata: { ...s.metadata, language: langLabel }, domain: s.domain, demo: s.demo,
-    transcript: s.tx, answers: s.answers, ai: s.ai, coverage: s.gaps?.items || [], conflicts: s.conflicts };
+    transcript: s.tx, answers: s.answers, ai: s.phase === "brd" ? aiCurrent : null, coverage: s.gaps?.items || [], conflicts: s.conflicts };
   const brd = compileDocument(docInput);
   // Without the AI app: BRDs get the rule-driven requirement simulator, other modes their templates.
   const templateApp = s.mode === "business"
     ? requirementsApp(brd.project_name, brd.business_rules.map((r, i) => ({ ...currentRules[i], ...r })), brd.open_questions)
     : compileScreens(docInput).appHtml;
-  const serverBody = { rules: approved, mode: s.mode, metadata: docInput.metadata, domain: s.domain, demo: s.demo, transcript: s.tx, answers: s.answers,
-    sections: s.ai?.sections || null, acceptance: s.ai?.acceptance || [], coverage: s.gaps?.items || [], conflicts: s.conflicts,
-    app_language: s.docLang, translations: s.translations || {} };
+  const bodyFor = (rules, extra = {}) => ({ rules, mode: s.mode, metadata: docInput.metadata, domain: s.domain, demo: s.demo, transcript: s.tx, answers: s.answers,
+    sections: null, acceptance: [], coverage: s.gaps?.items || [], conflicts: s.conflicts, app_language: "english", translations: {}, ...extra });
+  const serverBody = bodyFor(approved, { sections: aiCurrent?.sections || null, acceptance: aiCurrent?.acceptance || [], app_language: s.docLang, translations: s.translations || {} });
   const checks = s.rules.map(r => ({ ...verifyRule(r, s.tx), quote_note: r.quote_note || null }));
   const metadata = { ...s.metadata, mode: s.mode, ticketSummary: currentRules.map(r => r.action).join("\n") };
 
   // ── Agent: what does the BRD still need? ──
-  const runGaps = async (tx, answered) => {
-    setBusy(true); setError("");
-    const version = ++requestVersion.current;
+  const runGaps = async (tx, answered, background = false) => {
+    const st = stateRef.current;
+    if (background) setRechecking(true); else setBusy(true);
+    setError("");
+    const version = ++gapVersion.current;
     try {
-      const gaps = await api.gaps({ transcript: tx, mode: s.mode, lang: s.lang, answered, demo: s.demo });
-      if (active.current && version === requestVersion.current) set(p => ({ ...p, gaps, sarvamUsed: { ...p.sarvamUsed, ...(gaps.translated_with_sarvam ? { translate: true } : {}) } }));
-    } catch (e) { if (active.current && version === requestVersion.current) setError(e.message); }
-    finally { if (active.current && version === requestVersion.current) setBusy(false); }
+      const gaps = await api.gaps({ transcript: tx, mode: st.mode, lang: st.lang, answered, demo: st.demo });
+      if (active.current && version === gapVersion.current)
+        set(p => p.tx !== tx ? p : ({ ...p, gaps: applyAnswered(gaps, p.answers.map(a => a.key)), sarvamUsed: { ...p.sarvamUsed, ...(gaps.translated_with_sarvam ? { translate: true } : {}) } }));
+    } catch (e) { if (active.current && version === gapVersion.current && !background) setError(e.message); }
+    finally { if (active.current && version === gapVersion.current) { setBusy(false); setRechecking(false); } }
   };
   const startInterview = () => { const st = stateRef.current; setError(""); patch({ phase: "interview" }); runGaps(st.tx, st.answers.map(a => a.key)); };
   const saveAnswer = (question, text) => { const st = stateRef.current;
     const tx = st.tx.includes(text) ? st.tx : [st.tx, speakerLine(st.speaker, text)].filter(Boolean).join("\n");
-    const answers = [...s.answers.filter(a => a.key !== question.key), { key: question.key, question: question.question, answer: text, speaker: st.speaker }];
-    patch({ tx, answers, draftAnswer: "", skipped: st.skipped.filter(k => k !== question.key), ai: null, app: null, published: null });
-    runGaps(tx, answers.map(a => a.key));
+    const answers = [...st.answers.filter(a => a.key !== question.key), { key: question.key, question: question.question, answer: text, speaker: st.speaker }];
+    const keys = answers.map(a => a.key);
+    // The next question appears at once; the agent re-checks coverage in the background (the answer may cover more).
+    set(p => ({ ...p, tx, answers, draftAnswer: "", skipped: p.skipped.filter(k => k !== question.key), gaps: applyAnswered(p.gaps, keys), ai: null, app: null, appCache: {}, trCache: {}, published: null }));
+    runGaps(tx, keys, true);
   };
 
   // ── Recorded meeting (Sarvam batch diarization) and notes photo (Sarvam Doc AI) as input ──
@@ -181,7 +222,8 @@ function Workspace() {
       const merging = !!s.tx.trim() && !s.demo;
       const mergedSpeakers = merging ? [...new Set([...s.speakers, ...names])] : names;
       invalidate({ tx: merging ? s.tx + "\n" + tx : tx, demo: false, rules: [], answers: merging ? s.answers : [], skipped: merging ? s.skipped : [], gaps: null, conflicts: [], rejected: [],
-        evidence: merging ? [...s.evidence, evidence] : [evidence], speakers: mergedSpeakers, speaker: mergedSpeakers[0], talk, sarvamUsed: { ...s.sarvamUsed, stt: true, diarization: true } });
+        evidence: merging ? [...s.evidence, evidence] : [evidence], speakers: mergedSpeakers, speaker: mergedSpeakers[0], talk, sarvamUsed: { ...s.sarvamUsed, stt: true, diarization: true },
+        metadata: cleanMetadata(s), domain: s.demo || isDemoValue(s.domain) ? MODE_DOMAIN[s.mode] : s.domain });
     } catch (e) { setError(e.message); }
     finally { setUploading(""); }
   };
@@ -191,7 +233,8 @@ function Workspace() {
     try {
       const out = await api.notes(file, s.lang);
       const speakers = s.speakers.includes("Notes") ? s.speakers : [...s.speakers, "Notes"];
-      invalidate({ tx: [s.tx, out.transcript].filter(Boolean).join("\n"), demo: false, rules: [], gaps: null, speakers, sarvamUsed: { ...s.sarvamUsed, doc_ai: true } });
+      invalidate({ tx: [s.demo ? "" : s.tx, out.transcript].filter(Boolean).join("\n"), demo: false, rules: [], gaps: null, speakers, sarvamUsed: { ...s.sarvamUsed, doc_ai: true },
+        metadata: cleanMetadata(s), domain: s.demo || isDemoValue(s.domain) ? MODE_DOMAIN[s.mode] : s.domain });
     } catch (e) { setError(e.message); }
     finally { setUploading(""); }
   };
@@ -199,7 +242,7 @@ function Workspace() {
   const romanLines = s.lang !== "english" && /[A-Za-z]{3,}/.test(s.tx) && !/[\u0900-\u0DFF]/.test(s.tx.replace(/^\[[^\]]*\]/gm, ""));
   const toNativeScript = async () => {
     setError(""); setUploading("Sarvam is converting Roman script to " + langLabel + "…");
-    try { const out = await api.transliterate({ text: s.tx, target: s.lang }); if (out.changed) invalidate({ tx: out.text, rules: [], gaps: null }); else setError("Nothing to convert."); }
+    try { const out = await api.transliterate({ text: s.tx, target: s.lang }); if (out.changed) replaceTranscript(out.text); else setError("Nothing to convert."); }
     catch (e) { setError(e.message); } finally { setUploading(""); }
   };
   const renameSpeaker = (from, to) => {
@@ -248,7 +291,8 @@ function Workspace() {
       { const st = stateRef.current; const c = st.conflicts.find(x => !x.deferred); if (c) { const keep = st.rules.find(r => r.id === c.rule_ids[1]); const drop = c.rule_ids.find(id => id !== keep?.id); if (drop) updateRules(st.rules.filter(r => r.id !== drop)); } }
       await new Promise(r => setTimeout(r, 600));
       await narrate("Each requirement is approved after hearing it read back in the owner's language.");
-      patch({ phase: "signoff", metadata: { ...stateRef.current.metadata, reviewer: stateRef.current.metadata.reviewer || "Demo reviewer" } }); await until(st => st.phase === "signoff");
+      patch({ metadata: { ...stateRef.current.metadata, reviewer: stateRef.current.metadata.reviewer || "Demo reviewer" } }); await new Promise(r => setTimeout(r, 50));
+      startReview(false); await until(st => st.phase === "signoff");
       while (demoRun.current && stateRef.current.phase === "signoff") { decide(true); await new Promise(r => setTimeout(r, 350)); }
       await until(st => st.phase === "brd");
       await narrate("A twelve-section BRD with acceptance criteria, a Jira export, and a working first app. Scan the code to open it on your phone.");
@@ -270,7 +314,7 @@ function Workspace() {
       try {
         const result = await api.extract(s.tx, s.domain, s.mode, s.demo);
         const rules = result.rules.map(r => ({ ...r, speaker: r.speaker || speakerOf(r.source_quote, s.tx) || null }));
-        if (new Set(rules.map(r => r.speaker).filter(Boolean)).size >= 2) await api.conflicts({ rules, transcript: s.tx, demo: result.demo });
+        if (!Array.isArray(result.conflicts) && new Set(rules.map(r => r.speaker).filter(Boolean)).size >= 2) await api.conflicts({ rules, transcript: s.tx, demo: result.demo });
       } catch { /* best effort */ }
     })();
   }, [s.phase, s.tx, health?.live_llm, busy]);
@@ -286,8 +330,8 @@ function Workspace() {
         const e = r.source_quote ? st.evidence.find(e => e.transcript?.includes(r.source_quote)) : null;
         return { ...r, quote_note: r.verification?.quote_note || null, speaker: r.speaker || speakerOf(r.source_quote, st.tx) || (e?.speaker ?? null), evidence_id: e?.id || null, ...clipFor(r.source_quote, e) };
       });
-      patch({ rules, reviewNotes: result.review_notes || [], rejected: result.rejected || [], demo: result.demo, extractBrain: result.brain });
-      if (new Set(rules.map(r => r.speaker).filter(Boolean)).size >= 2) {
+      set(p => p.tx !== st.tx ? p : ({ ...p, rules, reviewNotes: result.review_notes || [], rejected: result.rejected || [], demo: result.demo, extractBrain: result.brain, conflicts: Array.isArray(result.conflicts) ? result.conflicts : [] }));
+      if (!Array.isArray(result.conflicts) && new Set(rules.map(r => r.speaker).filter(Boolean)).size >= 2) {
         const found = await api.conflicts({ rules, transcript: st.tx, demo: result.demo }).catch(e => ({ conflicts: [], note: e.message }));
         if (active.current && version === requestVersion.current) patch({ conflicts: found.conflicts || [] });
       }
@@ -303,13 +347,37 @@ function Workspace() {
     if (invalid) { setError(`Fix “${invalid.title || "untitled"}”: complete each field, copy the source text exactly, and use a valid clip range.`); return false; }
     return s.rules.length > 0;
   };
+  // Rules still waiting for a human decision. With fast approval, verified rules skip the queue.
+  const queueOf = st => st.queue.length ? st.queue : st.rules.map(r => r.id);
+  const queueIds = queueOf(s);
+  const reviewRule = s.rules.find(r => r.id === queueIds[s.soIdx]) || null;
+  const reviewCheck = reviewRule ? checks[s.rules.indexOf(reviewRule)] : null;
   const decide = (approve, spoken = null) => { const st = stateRef.current;
     if (!st.metadata.reviewer?.trim()) { setError("Enter the reviewer's name before recording a decision."); return; }
     setError("");
-    const r = st.rules[st.soIdx];
+    const ids = queueOf(st);
+    const r = st.rules.find(x => x.id === ids[st.soIdx]);
+    if (!r) { patch({ phase: "brd" }); return; }
     const next = st.approved.filter(a => a.id !== r.id);
     if (approve) next.push({ ...r, approved_at: new Date().toISOString(), approved_by: spoken ? `${st.metadata.reviewer} · by voice ("${spoken}")` : st.metadata.reviewer });
-    patch({ approved: next, published: null, ai: null, app: null, aiError: "", docLang: "english", translations: null, voiceHeard: null, voiceNote: spoken ? `Heard "${spoken}" → ${approve ? "approved" : "skipped"}` : "", ...(st.soIdx + 1 >= st.rules.length ? { phase: "brd" } : { soIdx: st.soIdx + 1 }) });
+    next.sort((x, y) => st.rules.findIndex(v => v.id === x.id) - st.rules.findIndex(v => v.id === y.id));  // FR-01… stay in spoken order
+    patch({ approved: next, published: null, docLang: "english", translations: null, voiceHeard: null, voiceNote: spoken ? `Heard "${spoken}" → ${approve ? "approved" : "skipped"}` : "", ...(st.soIdx + 1 >= ids.length ? { phase: "brd" } : { soIdx: st.soIdx + 1 }) });
+  };
+  // Fast approval: every requirement the verifier fully checked, in one step. Flagged ones and rules in an unresolved
+  // stakeholder conflict still get individual human review.
+  const conflicted = new Set(s.conflicts.filter(c => !c.deferred && c.rule_ids.every(id => s.rules.some(r => r.id === id))).flatMap(c => c.rule_ids));
+  const autoOk = s.rules.filter((r, i) => checks[i]?.status === "verified" && !conflicted.has(r.id));
+  const startReview = bulk => { const st = stateRef.current;
+    if (!validateRules()) return;
+    const reviewer = (st.metadata.reviewer || st.metadata.owner || st.speakers[0] || "").trim();
+    if (bulk && !reviewer) { setError("Enter the reviewer's name to approve the verified requirements."); return; }
+    setError("");
+    const now = new Date().toISOString();
+    const okIds = new Set(bulk ? autoOk.map(r => r.id) : []);
+    const queue = st.rules.filter(r => !okIds.has(r.id)).map(r => r.id);
+    patch({ approved: bulk ? autoOk.map(r => ({ ...r, approved_at: now, approved_by: reviewer })) : [], queue, soIdx: 0, published: null,
+      metadata: { ...st.metadata, reviewer }, phase: queue.length ? "signoff" : "brd" });
+    prefetch(st.rules);  // start drafting the BRD and building the app while the human reviews
   };
   // Spoken sign-off: "haan / ಹೌದು / yes" approves, "nahi / ಇಲ್ಲ / no" skips. Anything else asks again. Buttons always remain.
   const voiceTimer = useRef(null);
@@ -328,39 +396,68 @@ function Workspace() {
     else patch({ voiceHeard: null, voiceNote: `Heard "${heard}". Say haan or nahi, or use the buttons.` });
   }, [s.voiceHeard]);
 
-  // ── Final BRD: AI drafts the remaining sections (verified), then the app is generated from that BRD ──
-  const generateApp = async (body = serverBody) => {
-    setAiBusy("app");
-    try { const app = await api.generateApp(body); if (active.current) patch({ app }); }
-    catch (e) { if (active.current) patch({ app: { html: null, generator: "template", note: e.message } }); }
-    finally { if (active.current) setAiBusy(""); }
+  // ── Final BRD: the AI drafts the sections (verified) and builds the app in parallel, starting during sign-off.
+  // Every result is stored under the exact input it was made for, so a late answer can never land in another session.
+  const track = async (key, fn) => {
+    if (pendingRef.current.has(key)) return;
+    pendingRef.current.add(key); setPending([...pendingRef.current]);
+    try { await fn(); } finally { pendingRef.current.delete(key); if (active.current) setPending([...pendingRef.current]); }
   };
-  const draftBrd = async () => {
-    if (!approved.length || drafting.current) return;  // StrictMode/reloads must not start two drafts
-    drafting.current = true;
-    setAiBusy("draft"); patch({ aiError: "" });
-    let ai = null;
-    try { ai = await api.draftBrd(serverBody); if (active.current) patch({ ai }); }
-    catch (e) { if (active.current) patch({ aiError: e.message }); }
-    try { await generateApp({ ...serverBody, sections: ai?.sections || null, acceptance: ai?.acceptance || [] }); }
-    finally { drafting.current = false; }
+  const runDraft = rules => {
+    const key = draftKey(rules), body = bodyFor(rules);
+    return track("draft:" + key, async () => {
+      try { const ai = await api.draftBrd(body); if (active.current) patch({ ai: { ...ai, key }, aiError: "", aiErrorKey: null }); }
+      catch (e) { if (active.current) patch({ aiError: e.message, aiErrorKey: key }); }
+    });
+  };
+  const runApp = (rules, language = "english", translations = {}) => {
+    const key = draftKey(rules) + "|" + language;
+    const ai = s.ai?.key === draftKey(rules) ? s.ai : null;
+    const body = bodyFor(rules, { sections: ai?.sections || null, acceptance: ai?.acceptance || [], app_language: language, translations });
+    return track("app:" + key, async () => {
+      let app;
+      try { app = await api.generateApp(body); }
+      catch (e) { app = { html: null, generator: "template", language: "english", note: e.message }; }
+      if (active.current) set(p => ({ ...p, appCache: { ...p.appCache, [key]: app } }));
+    });
+  };
+  const prefetch = rules => { if (rules.length && health?.live_llm) { runDraft(rules); runApp(rules); } };
+  useEffect(() => {
+    if (s.phase !== "brd" || !approved.length) return;
+    if (s.ai?.key !== approvedKey && s.aiErrorKey !== approvedKey) runDraft(approved);
+    if (!s.appCache[approvedKey + "|" + s.docLang]) runApp(approved, s.docLang, s.translations || {});
+  }, [s.phase, approvedKey, s.ai?.key, s.aiErrorKey, s.docLang, !!currentApp]);
+
+  // Translations are cached per language for this exact BRD; the session language is prepared in the background.
+  const brdTexts = () => [...new Set([...Object.values(brd.sections || {}).flat().map(i => i.text), ...brd.business_rules.map(r => r.rule), ...(brd.open_questions || [])])];
+  const trKey = approvedKey + "|" + (aiCurrent ? "ai" : "base");
+  const translateBrd = async language => {
+    const cached = s.trCache[language];
+    if (cached?.key === trKey) return cached.map;
+    const texts = brdTexts();
+    const { translations: out } = await api.translate({ texts, target: language });
+    const map = Object.fromEntries(texts.map((t, i) => [t, out[i]]));
+    if (active.current) set(p => ({ ...p, trCache: { ...p.trCache, [language]: { key: trKey, map } }, sarvamUsed: { ...p.sarvamUsed, translate: true } }));
+    return map;
   };
   useEffect(() => {
-    if (s.phase === "brd" && approved.length && !s.ai && !s.aiError && !s.app && !aiBusy) draftBrd();
-  }, [s.phase, approved.length, !!s.ai, !!s.app, s.aiError]);
-  // While the reviewer approves rule by rule, draft the BRD and the app for "all rules approved" in the background.
-  // The server caches by request content, so if every rule is approved the real calls return instantly.
-  useEffect(() => {
-    if (s.phase !== "signoff" || !health?.live_llm || !s.rules.length) return;
-    const key = s.rules.map(r => r.id + ":" + r.title + ":" + r.condition + ":" + r.action).join("|") + "|" + s.tx.length;
-    if (prefetched.current === key) return;
-    prefetched.current = key;
-    const body = { ...serverBody, rules: s.rules.map(r => ({ ...r, approved_at: r.approved_at || new Date().toISOString(), approved_by: r.approved_by || s.metadata.reviewer || "Reviewer" })) };
-    (async () => {
-      try { const ai = await api.draftBrd(body); await api.generateApp({ ...body, sections: ai?.sections || null, acceptance: ai?.acceptance || [] }); }
-      catch { /* best effort: the real request will simply not hit the cache */ }
-    })();
-  }, [s.phase, health?.live_llm]);
+    if (s.phase !== "brd" || s.lang === "english" || !sarvamVoice || !aiCurrent || !currentApp || s.trCache[s.lang]?.key === trKey) return;
+    track("tr:" + s.lang + trKey, async () => {
+      try { const map = await translateBrd(s.lang); if (!s.appCache[approvedKey + "|" + s.lang]) runApp(approved, s.lang, map); } catch { /* the switch button retries visibly */ }
+    });
+  }, [s.phase, s.lang, sarvamVoice, !!aiCurrent, !!currentApp, trKey]);
+  const switchLanguage = async language => {
+    if (language === "english") { patch({ docLang: "english", translations: null }); return 0; }
+    const cached = s.trCache[language];
+    if (cached?.key === trKey) { patch({ docLang: language, translations: cached.map }); return Object.keys(cached.map).length; }
+    patch({ docLang: language, translations: null });  // the app build starts now, in parallel with the BRD translation
+    setLangBusy(true);
+    try {
+      const map = await translateBrd(language);
+      if (active.current) set(p => p.docLang === language ? { ...p, translations: map } : p);
+      return Object.keys(map).length;
+    } finally { if (active.current) setLangBusy(false); }
+  };
 
   const publish = async key => {
     setBusy(true); setError("");
@@ -378,20 +475,21 @@ function Workspace() {
       const remap = r => ({ ...r, evidence_id: mapping[r.evidence_id] || r.evidence_id || null });
       const rules = approved.map(remap);
       patch({ evidence, rules: s.rules.map(remap), approved: rules });
-      const published = await api.publish({ ...serverBody, rules, evidence, language: s.lang, app_html: s.app?.html || null, app_generator: s.app?.generator || "template" }, key);
+      const published = await api.publish({ ...serverBody, rules, evidence, language: s.lang, app_html: currentApp?.html || null, app_generator: currentApp?.generator || "template" }, key);
       patch({ published });
     } catch (e) { setError(e.message); } finally { setBusy(false); }
   };
   const reset = () => { requestVersion.current++; set(fresh(s.mode, s.lang, s.a11y, s.targetDevice)); setError(""); };
   const useMeetingDemo = () => {
     setError("");
-    invalidate({ tx: MEETING.transcript[s.lang], demo: true, rules: [], evidence: [], answers: [], skipped: [], gaps: null, conflicts: [], rejected: [],
+    invalidate({ queue: [], talk: null, tx: MEETING.transcript[s.lang], demo: true, rules: [], evidence: [], answers: [], skipped: [], gaps: null, conflicts: [], rejected: [],
       speakers: [...MEETING.speakers], speaker: MEETING.speakers[0], domain: MEETING.domain,
       metadata: { title: "Demo · " + MEETING.title, owner: DEMO_OWNER[s.lang] || "Spice wholesaler, Indore", reviewer: "Demo reviewer" } });
   };
   const addSpeaker = name => { const v = name.trim().slice(0, 40); if (v && !s.speakers.includes(v)) patch({ speakers: [...s.speakers, v], speaker: v }); };
-  const appLanguage = LANGS.find(([c]) => c === (s.app?.language || "english"))?.[1];
-  const appLabel = (s.app?.generator?.startsWith("ai:") ? "AI-generated from your BRD" : s.mode === "business" ? "Requirement simulator (built from the BRD, no AI)" : "Template filled with your requirements") + " · " + appLanguage;
+  const appLanguage = LANGS.find(([c]) => c === (currentApp?.language || "english"))?.[1];
+  const appLabel = (currentApp?.generator?.startsWith("ai:") ? "AI-generated from your BRD" : s.mode === "business" ? "Requirement simulator (built from the BRD, no AI)" : "Template filled with your requirements") + " · " + appLanguage;
+  const draftPending = pending.includes("draft:" + approvedKey), appPending = pending.includes("app:" + approvedKey + "|" + s.docLang);
   const visibleConflicts = s.conflicts.filter(c => !c.deferred && c.rule_ids.every(id => s.rules.some(r => r.id === id)));
   const transcriptLines = s.tx.split("\n").filter(l => l.trim()).map(lineParts);
 
@@ -456,7 +554,7 @@ function Workspace() {
         {s.a11y !== "deaf" && <div className="mic-row">
           <button className={"mic-btn" + (recorder.recording ? " on" : "")} aria-label={recorder.recording ? "Stop recording" : "Record microphone"}
             disabled={busy || (!recorder.recording && recorder.processing > 0)}
-            onClick={recorder.recording ? recorder.stop : () => { invalidate({ rules: [], demo: false }); setError(""); recorder.start(); }}>
+            onClick={recorder.recording ? recorder.stop : () => { replaceTranscript(s.demo ? "" : s.tx); setError(""); recorder.start(); }}>
             <span aria-hidden="true">{recorder.recording ? "■" : "🎙"}</span></button>
           <div className="mic-status"><Wave active={recorder.recording} />
             <p role="status">{recorder.recording ? `Listening to ${s.speaker}… tap the button to stop` : recorder.processing ? "" : `Tap the microphone and speak as ${s.speaker}`}{recorder.processing ? "Sarvam Saaras is transcribing " + recorder.processing + " segment(s)…" : ""}</p>
@@ -470,13 +568,13 @@ function Workspace() {
           {l.speaker && <span className="speaker-chip">{l.speaker}</span>}<span lang={s.lang === "english" ? "en" : undefined}>{l.text}</span></li>)}</ol>}
         <details className="tx-edit" open={txOpen} onToggle={e => setTxOpen(e.currentTarget.open)}>
           <summary>{s.tx.trim() ? "Edit the words" : "Type or paste the words instead"}</summary>
-          <label htmlFor="transcript-input">Transcript</label><textarea id="transcript-input" className="transcript" value={s.tx} disabled={recorder.requesting || recorder.recording || recorder.processing > 0 || !!uploading} placeholder="Type or paste the speaker's words, or paste a WhatsApp chat export. Start a line with [Name] to mark who said it." onChange={e => invalidate({ tx: e.target.value, rules: [], demo: false, gaps: null })} />
+          <label htmlFor="transcript-input">Transcript</label><textarea id="transcript-input" className="transcript" value={s.tx} disabled={recorder.requesting || recorder.recording || recorder.processing > 0 || !!uploading} placeholder="Type or paste the speaker's words, or paste a WhatsApp chat export. Start a line with [Name] to mark who said it." onChange={e => replaceTranscript(e.target.value)} />
         </details>
       </section>
       <MetadataForm mode={s.mode} metadata={s.metadata} onChange={metadata => invalidate({ metadata })} />
       <div className="actions">
         {s.mode === "business" && MEETING.transcript[s.lang] && <button className="btn btn-ghost" disabled={locked} onClick={useMeetingDemo}>Use 2-speaker meeting demo</button>}
-        <button className="btn btn-ghost" disabled={locked} onClick={() => { setError(""); invalidate({ tx: api.demoTranscript(s.lang, s.mode), demo: true, rules: [], evidence: [], answers: [], gaps: null, domain: MODE_DOMAIN[s.mode], metadata: { title: "Demo · " + INTENT_MODES.find(m => m.id === s.mode).title, reviewer: "Demo reviewer" } }); }}>Use demo</button>
+        <button className="btn btn-ghost" disabled={locked} onClick={() => { setError(""); invalidate({ queue: [], talk: null, tx: api.demoTranscript(s.lang, s.mode), demo: true, rules: [], evidence: [], answers: [], gaps: null, domain: MODE_DOMAIN[s.mode], metadata: { title: "Demo · " + INTENT_MODES.find(m => m.id === s.mode).title, reviewer: "Demo reviewer" } }); }}>Use demo</button>
         <button className="btn btn-primary" disabled={!s.tx.trim() || locked} onClick={startInterview}>Next: agent checks for gaps →</button>
         <button className="btn btn-ghost" disabled={!s.tx.trim() || locked} onClick={() => patch({ phase: "extract" })}>Enter rules manually</button></div>
       {s.demo && <p className="demo-banner">Sample transcript selected. No original speaker audio is supplied.</p>}
@@ -485,7 +583,7 @@ function Workspace() {
 
     {s.phase === "interview" && <>
       <h1>The agent's questions</h1><p>A complete BRD needs 8 things. The agent shows what was already said (with the exact words) and asks only for what is missing.</p>
-      <Interview gaps={s.gaps} busy={busy} lang={s.lang} langLabel={langLabel} a11y={s.a11y} sarvamVoice={sarvamVoice} recorder={recorder} demo={s.demo}
+      <Interview gaps={s.gaps} busy={busy} rechecking={rechecking} lang={s.lang} langLabel={langLabel} a11y={s.a11y} sarvamVoice={sarvamVoice} recorder={recorder} demo={s.demo}
         draft={s.draftAnswer} onDraft={draftAnswer => patch({ draftAnswer })} skipped={s.skipped} onSave={saveAnswer}
         onSkip={key => patch({ skipped: [...new Set([...s.skipped, key])], draftAnswer: "" })} onRetry={() => runGaps(s.tx, s.answers.map(a => a.key))}
         onContinue={extract} onVoiceUsed={translated => markUsed({ tts: true, translate: translated })} keyterms={keytermsFor(s)} />
@@ -513,22 +611,30 @@ function Workspace() {
             <div className="actions owner-actions"><button className="btn btn-ghost" onClick={() => setEditing(ids => [...ids, r.id])}>Fix this</button><button className="btn btn-ghost" onClick={() => updateRules(s.rules.filter(v => v.id !== r.id))}>Not needed</button></div>
           </article>)}
       <div className="actions"><button className="btn btn-ghost" disabled={busy} onClick={() => { const id = crypto.randomUUID(); set(p => ({ ...p, editing: [...(p.editing || []), id] })); updateRules([...s.rules, { id, title: "", condition: "", action: "", exception: null, confidence: "MEDIUM", type: "requirement", source_quote: "", numbers: [], speaker: s.speaker, evidence_id: null, start: null, end: null }]); }}>Add requirement</button>
-        <button className="btn btn-primary" disabled={busy || !s.rules.length} onClick={() => { if (validateRules()) { setError(""); patch({ phase: "signoff", metadata: { ...s.metadata, reviewer: s.metadata.reviewer || s.metadata.owner || s.speakers[0] || "" } }); } }}>Review and approve →</button></div>
+        <button className="btn btn-primary" disabled={busy || !s.rules.length} onClick={() => startReview(false)}>Review and approve →</button></div>
+      {!!s.rules.length && <section className="card fast-approve" aria-label="Fast approval">
+        <div><h2>Fast approval</h2><p className="source-note">Approve every requirement the verifier fully checked in one step. Only flagged ones (numbers to confirm, vague words, stakeholder conflicts) need individual review. The BRD and the app start building right away.</p></div>
+        <label>Reviewer name<input value={s.metadata.reviewer || ""} onChange={e => patch({ metadata: { ...s.metadata, reviewer: e.target.value }, published: null })} /></label>
+        <button className="btn btn-ok" disabled={busy || !autoOk.length} onClick={() => startReview(true)}>Approve {autoOk.length} verified{s.rules.length - autoOk.length ? ` · review ${s.rules.length - autoOk.length} flagged` : ""} →</button>
+      </section>}
     </>}
 
-    {s.phase === "signoff" && s.rules[s.soIdx] && <><h1>Source-backed sign-off</h1><p>Requirement {s.soIdx + 1} of {s.rules.length}. Listen to the original voice, hear it read back in your language, then decide.</p><progress aria-label="Review progress" max={s.rules.length} value={s.soIdx} />
+    {s.phase === "signoff" && reviewRule && <><h1>Source-backed sign-off</h1><p>Requirement {s.soIdx + 1} of {queueIds.length}{approved.length && s.queue.length < s.rules.length ? ` (${s.rules.length - s.queue.length} verified requirements already approved)` : ""}. Listen to the original voice, hear it read back in your language, then decide.</p><progress aria-label="Review progress" max={queueIds.length} value={s.soIdx} />
+      {pending.some(k => k.startsWith("draft:") || k.startsWith("app:")) && <p className="source-note prefetch-note">The BRD and the app are already being prepared in the background.</p>}
       <label>Reviewer name<input value={s.metadata.reviewer || ""} onChange={e => patch({ metadata: { ...s.metadata, reviewer: e.target.value }, published: null })} /></label>
-      <RuleCard r={s.rules[s.soIdx]} check={checks[s.soIdx]} lang={s.lang} evidence={s.evidence} a11y={s.a11y} sarvamVoice={sarvamVoice} onSarvamUsed={markUsed} />
+      <RuleCard r={reviewRule} check={reviewCheck} lang={s.lang} evidence={s.evidence} a11y={s.a11y} sarvamVoice={sarvamVoice} onSarvamUsed={markUsed} />
       <p className="source-note">Approval records your review decision and time. It is not an electronic signature or proof of speaker identity. After the last requirement you get the full BRD, with PDF, Word, Markdown and Jira downloads.</p>
-      <div className="actions"><button className="btn btn-ok" onClick={() => decide(true)}>{["needs_confirmation", "unsupported_number"].includes(checks[s.soIdx]?.status) ? "Approve: I confirm the numbers" : "Approve requirement"}</button><button className="btn btn-ghost" onClick={() => decide(false)}>Skip requirement</button>
+      <div className="actions"><button className="btn btn-ok" onClick={() => decide(true)}>{["needs_confirmation", "unsupported_number"].includes(reviewCheck?.status) ? "Approve: I confirm the numbers" : "Approve requirement"}</button><button className="btn btn-ghost" onClick={() => decide(false)}>Skip requirement</button>
         {s.a11y !== "deaf" && <button className={"btn " + (recorder.recording ? "btn-rec" : "btn-ghost")} disabled={!recorder.recording && recorder.processing > 0} onClick={recorder.recording ? recorder.stop : listenForDecision}>
           🎙 {recorder.recording ? "Listening… say haan or nahi" : recorder.processing ? "Sarvam is listening…" : "Say haan or nahi to decide"}</button>}
         {s.voiceNote && <span role="status" className="source-note">{s.voiceNote}</span>}</div></>}
 
-    {s.phase === "brd" && <BrdView brd={brd} appHtml={s.app?.html || templateApp} appLabel={s.app ? appLabel : "Template preview (AI app not generated yet)"} appNote={s.app?.note}
+    {s.phase === "brd" && <BrdView brd={brd} appHtml={currentApp?.html || templateApp} appLabel={currentApp ? appLabel : "Requirement simulator (the AI app is still being built)"} appNote={currentApp?.note}
       evidence={s.evidence} langs={LANGS} lang={s.lang} reset={reset} widgets={s.widgets} onWidgets={widgets => patch({ widgets })} metadata={metadata}
-      ai={{ busy: aiBusy, error: s.aiError, stats: s.ai?.stats }} onRedraft={() => { patch({ ai: null, aiError: "", app: null, docLang: "english", translations: null }); }} onRegenerateApp={() => generateApp()}
-      docLang={s.docLang} translations={s.translations} onLanguage={(docLang, translations) => { patch({ docLang, translations }); generateApp({ ...serverBody, app_language: docLang, translations: translations || {} }); }}
+      ai={{ busy: draftPending ? "draft" : appPending ? "app" : "", error: s.aiErrorKey === approvedKey ? s.aiError : "", stats: aiCurrent?.stats }}
+      onRedraft={() => patch({ ai: null, aiError: "", aiErrorKey: null, docLang: "english", translations: null, trCache: {} })}
+      onRegenerateApp={() => set(p => { const appCache = { ...p.appCache }; delete appCache[approvedKey + "|" + p.docLang]; return { ...p, appCache }; })}
+      docLang={s.docLang} translations={s.translations} onLanguage={switchLanguage} langBusy={langBusy}
       serverBody={serverBody} sarvamVoice={sarvamVoice} onSarvamUsed={markUsed} completeness={s.gaps?.completeness} a11y={s.a11y} emailEnabled={!!health?.email}
       shareUrl={s.published?.preview_url || s.published?.url} share={<SharePanel published={s.published} onPublish={publish} busy={busy} mode={s.mode} />} targetDevice={s.targetDevice} />}
     {demoCaption && <div className="demo-caption" role="status"><span>{demoCaption}</span>{demoRun.current && <button className="btn-link" onClick={stopDemo}>Stop</button>}</div>}
