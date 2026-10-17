@@ -23,7 +23,7 @@ export default function SourceAudio({ evidence, start, end, portal, caption }) {
   }, [evidence?.id, evidence?.key, portal?.id, portal?.key]);
   if (!evidence) return <p className="source-note">Text source only — no original audio attached.</p>;
   return <div className="source-audio">
-    <p>{caption || (start != null && end != null ? `Original clip · ${start}s–${end}s` : "Original recording · full segment")}</p>
+    <p>{caption || (start != null && end != null ? `Original clip · ${start}s–${end}s` : "Original recording · full segment")}{evidence.synthetic && <small className="synthetic-note"> · demo voice synthesised by Sarvam Bulbul, not a real person</small>}</p>
     {url && <audio ref={player} controls preload="metadata" src={url}
       onLoadedMetadata={() => { if (start != null) player.current.currentTime = start; }}
       onPlay={() => { const p = player.current; if (start != null && (p.currentTime < start || (end != null && p.currentTime >= end))) p.currentTime = start; }}

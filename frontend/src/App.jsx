@@ -276,7 +276,7 @@ function Workspace() {
       await narrate("A spice wholesaler and his manager described the app they need, in their own language.");
       useMeetingDemo(); await until(st => st.demo && st.tx.includes("[Manager]"));
       await narrate("The agent checks the eight things a BRD needs and asks only for what is missing.");
-      startInterview(); await until(st => st.phase === "interview" && st.gaps);
+      startInterview(); await until(st => st.phase === "interview" && st.gaps, 90000);
       for (let i = 0; i < 2; i++) {
         const st = stateRef.current, q = (st.gaps?.questions || []).filter(x => !st.skipped.includes(x.key))[0];
         if (!q) break;
@@ -288,7 +288,7 @@ function Workspace() {
       await narrate("Every requirement quotes the speaker exactly. The owner said fifty kilos, the manager said one hundred. VAANI caught it, with both voices.");
       await extract(); await until(st => st.phase === "extract" && st.rules.length > 0, 90000);
       await narrate("Keep the manager's version. A number nobody said would be blocked in red.");
-      { const st = stateRef.current; const c = st.conflicts.find(x => !x.deferred); if (c) { const keep = st.rules.find(r => r.id === c.rule_ids[1]); const drop = c.rule_ids.find(id => id !== keep?.id); if (drop) updateRules(st.rules.filter(r => r.id !== drop)); } }
+      { const st = stateRef.current; const c = st.conflicts.find(x => !x.deferred); if (c) { const pair = c.rule_ids.map(id => st.rules.find(r => r.id === id)); const keep = pair.find(r => r?.speaker === "Manager") || pair[1]; const drop = c.rule_ids.find(id => id !== keep?.id); if (drop) updateRules(st.rules.filter(r => r.id !== drop)); } }
       await new Promise(r => setTimeout(r, 600));
       await narrate("Each requirement is approved after hearing it read back in the owner's language.");
       patch({ metadata: { ...stateRef.current.metadata, reviewer: stateRef.current.metadata.reviewer || "Demo reviewer" } }); await new Promise(r => setTimeout(r, 50));
@@ -482,9 +482,12 @@ function Workspace() {
   const reset = () => { requestVersion.current++; set(fresh(s.mode, s.lang, s.a11y, s.targetDevice)); setError(""); };
   const useMeetingDemo = () => {
     setError("");
-    invalidate({ queue: [], talk: null, tx: MEETING.transcript[s.lang], demo: true, rules: [], evidence: [], answers: [], skipped: [], gaps: null, conflicts: [], rejected: [],
+    const tx = MEETING.transcript[s.lang];
+    invalidate({ queue: [], talk: null, tx, demo: true, rules: [], evidence: [], answers: [], skipped: [], gaps: null, conflicts: [], rejected: [],
       speakers: [...MEETING.speakers], speaker: MEETING.speakers[0], domain: MEETING.domain,
       metadata: { title: "Demo · " + MEETING.title, owner: DEMO_OWNER[s.lang] || "Spice wholesaler, Indore", reviewer: "Demo reviewer" } });
+    // Bulbul voices the demo in two voices, so every requirement and both sides of the conflict can be heard (labelled as synthesised).
+    if (sarvamVoice) api.demoVoices(s.lang).then(out => set(p => p.tx === tx && p.demo ? { ...p, evidence: out.evidence, sarvamUsed: { ...p.sarvamUsed, tts: true } } : p)).catch(() => {});
   };
   const addSpeaker = name => { const v = name.trim().slice(0, 40); if (v && !s.speakers.includes(v)) patch({ speakers: [...s.speakers, v], speaker: v }); };
   const appLanguage = LANGS.find(([c]) => c === (currentApp?.language || "english"))?.[1];

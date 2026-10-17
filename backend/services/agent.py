@@ -6,7 +6,7 @@ quotes the exact words that cover it, and a conflict must name two real requirem
 import asyncio
 import json
 import math
-from services import llm, sarvam
+from services import config, llm, sarvam
 import mocks
 
 CHECKLIST = mocks.BRD["CHECKLIST"]
@@ -101,12 +101,21 @@ async def assess(transcript, mode, lang, answered, demo):
     answered = set(answered)
     coverage, brain = {}, None
     meeting = meeting_language(transcript) if demo else None
-    if meeting:
+    live_demo = bool(meeting) and llm.live() and config.DEMO_LIVE
+    result = None
+    if live_demo or (not meeting and llm.live()):
+        try:
+            result, brain = await llm.agent_json(coverage_prompt(transcript, mode, answered), system=SYSTEM, schema=COVERAGE_SCHEMA)
+        except Exception:
+            if not live_demo:
+                raise
+            print("[agent] live check of the demo failed; using the demo fixture")
+            result = None
+    if meeting and result is None:
         for key, quote in mocks.MEETING["coverage"][meeting].items():
             coverage[key] = {"covered": True, "source_quote": quote, "question": None}
         brain = "demo fixture"
-    elif llm.live():
-        result, brain = await llm.agent_json(coverage_prompt(transcript, mode, answered), system=SYSTEM, schema=COVERAGE_SCHEMA)
+    elif result is not None:
         for item in result.get("items", []):
             key = item.get("key")
             if key not in KEYS or key in answered:
@@ -151,12 +160,18 @@ async def conflicts(rules, transcript, demo):
     by_id = {r["id"]: r for r in rules}
     if len(speakers) < 2:
         return {"conflicts": [], "brain": None, "note": "Conflict check needs requirements from at least two speakers."}
-    if demo and meeting_language(transcript):
+    meeting = demo and meeting_language(transcript)
+    raw = None
+    if llm.live() and (not meeting or config.DEMO_LIVE):
+        try:
+            result, brain = await llm.agent_json(conflict_prompt(rules), system=SYSTEM, schema=CONFLICT_SCHEMA)
+            raw = result.get("conflicts", [])
+        except Exception:
+            if not meeting:
+                raise
+    if meeting and raw is None:
         raw, brain = mocks.MEETING["conflicts"], "demo fixture"
-    elif llm.live():
-        result, brain = await llm.agent_json(conflict_prompt(rules), system=SYSTEM, schema=CONFLICT_SCHEMA)
-        raw = result.get("conflicts", [])
-    else:
+    elif raw is None:
         return {"conflicts": [], "brain": None, "note": "Conflict check needs a configured AI model."}
     return {"conflicts": validate_conflicts(raw, rules), "brain": brain, "note": None}
 

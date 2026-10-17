@@ -78,12 +78,24 @@ python benchmark.py          # writes ../BENCHMARK.md; --no-llm for the verifier
 ```
 Last run (17 Oct 2026): verifier 66/66 planted errors caught, 0 false blocks on 24 genuine requirements; conflict detector 7/7 found, 0 false alarms on Sarvam 105B.
 
+## Share on a phone (QR codes)
+A portal link that says `localhost` opens nowhere but the laptop. The backend therefore serves the built frontend at
+`/app` and builds share links from the laptop's Wi-Fi address:
+```bash
+cd Vaani_code/vaani-repo/frontend && npx vite build
+cd ../backend && python -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+Publish from the BRD page: the QR code now points at `http://<laptop address>:8000/app/?portal=…`, which any phone on the
+same Wi-Fi opens (allow Python through the Windows firewall when asked). For a link that works from anywhere, run
+`cloudflared tunnel --url http://localhost:8000` and set `PUBLIC_URL` in `backend/.env` to the address it prints.
+`/api/health` reports the share base and its reach (`lan`, `public`, `local`).
+
 ## Tests
 ```bash
 cd Vaani_code/vaani-repo/backend
 python -m unittest discover -s tests -p "test_*.py"
 ```
-86 tests cover the verifier, agent, conflicts, BRD drafting, exports, the session-leak and speed fixes from the real test, Sarvam request shapes (v4 codemix and keyterms, v4-flash voices, the 105B request that answers, the cache, the circuit breaker, Kannada, meeting diarization and Doc AI notes) and access control.
+90 tests cover the verifier, agent, conflicts, BRD drafting, exports, the session-leak and speed fixes from the real test, Sarvam request shapes (v4 codemix and keyterms, v4-flash voices, the 105B request that answers, the cache, the circuit breaker, Kannada, meeting diarization and Doc AI notes) and access control.
 
 ```bash
 cd Vaani_code/vaani-repo/frontend

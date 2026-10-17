@@ -30,6 +30,9 @@ class InMemoryRateLimiter(BaseHTTPMiddleware):
         # Exclude CORS preflight OPTIONS, docs, health, and test suite client
         if request.method == "OPTIONS" or request.url.path in ("/", "/docs", "/openapi.json", "/api/health"):
             return await call_next(request)
+        # A portal page on a phone loads its clips, QR images and static files in one burst; those are cheap reads.
+        if request.method == "GET" and (request.url.path.startswith(("/api/evidence/", "/api/portals/", "/api/qr", "/app", "/p/"))):
+            return await call_next(request)
 
         # Starlette testclient bypass
         if not request.client or request.client.host in ("testclient", "test", ""):

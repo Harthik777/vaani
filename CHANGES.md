@@ -1,5 +1,24 @@
 # Vaani change log
 
+## 17 Oct, 23:00: what a judge sees is live, audible and shareable
+
+A cold walk through the app as a judge found three things that undercut the pitch even though the code behind them worked:
+
+1. **"Checked by: demo fixture."** The meeting demo bypassed the models, so the agent screen and the Review screen said
+   "fixture". Now the demo transcript runs through the real agent (Sarvam 105B, then the fast Gemini model) and the real
+   extraction with conflict detection whenever a model is configured; the fixture remains the offline path and the safety
+   net if a call fails (`VAANI_DEMO_LIVE=off` pins the fixture). The response cache keeps a rehearsed run instant.
+2. **"Text source only, no original audio attached."** The demo had no voices, so "hear the owner say it" was never shown.
+   `POST /api/demo/voices` has Bulbul read every demo line in two voices (Owner and Manager, verified speaker ids per
+   language) and stores each clip as evidence, labelled "demo voice synthesised by Sarvam Bulbul, not a real person". Each
+   requirement and both sides of the conflict now play back.
+3. **A share link and QR code that said `localhost`.** The backend serves the built frontend at `/app` and builds share
+   links from the laptop's Wi-Fi address (or `PUBLIC_URL` for a tunnel), so a phone can scan the code. `/api/health`
+   reports the reach.
+
+Also fixed: a merge slip in `sarvam.py` made unexpected Sarvam errors recurse instead of raising; they now surface as
+"Sarvam returned 400: …". 90 backend tests (4 new: live-first demo with fixture fallback, demo voices), 13 browser flows.
+
 ## 17 Oct night: merge of both branches (nothing lost, everything measured)
 
 Two trees were developed in parallel on 17 Oct. This merge keeps every feature from both:

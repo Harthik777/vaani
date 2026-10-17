@@ -21,7 +21,7 @@ def live_llm():
 class Patched(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.patches = [patch.object(config, "DATA_DIR", Path(self.tmp.name)), patch.object(config, "USE_REAL_SARVAM", False)]
+        self.patches = [patch.object(config, "DATA_DIR", Path(self.tmp.name)), patch.object(config, "USE_REAL_SARVAM", False), patch.object(config, "USE_REAL_LLM", False)]
         for p in self.patches:
             p.start()
         self.client = TestClient(app)
@@ -338,3 +338,49 @@ class SarvamAdapterTests(Patched):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LiveDemoTests(Patched):
+    """With a model configured, the meeting demo runs through the real agent and extraction (what the audience sees is live);
+    the fixture is the safety net when a call fails, and the only path when no model is configured."""
+    KEY, QUOTE = next(iter(mocks.MEETING["coverage"]["english"].items()))
+    COVER = {"items": [{"key": KEY, "covered": True, "source_quote": QUOTE}, {"key": "users", "covered": False, "question": "Who will use it?"}]}
+
+    def test_demo_gap_check_uses_the_live_agent_and_falls_back_to_the_fixture(self):
+        self.with_patches(*live_llm())
+        with patch.object(llm, "agent_json", new=AsyncMock(return_value=(self.COVER, "gemini:fake"))):
+            body = self.client.post("/api/agent/gaps", json={"transcript": EN, "lang": "english", "demo": True}).json()
+        self.assertEqual(body["brain"], "gemini:fake")
+        self.assertIn("users", body["sample_answers"])  # the demo's sample answers stay available
+        status = {i["key"]: i["status"] for i in body["items"]}
+        self.assertEqual((status[self.KEY], status["users"]), ("covered", "missing"))
+        with patch.object(llm, "agent_json", new=AsyncMock(side_effect=RuntimeError("429"))):
+            body = self.client.post("/api/agent/gaps", json={"transcript": EN, "lang": "english", "demo": True}).json()
+        self.assertEqual(body["brain"], "demo fixture")
+        self.assertEqual(body["completeness"], 38)
+        with patch.object(config, "DEMO_LIVE", False), patch.object(llm, "agent_json", new=AsyncMock(return_value=(self.COVER, "gemini:fake"))) as fake:
+            body = self.client.post("/api/agent/gaps", json={"transcript": EN, "lang": "english", "demo": True}).json()
+        self.assertEqual(body["brain"], "demo fixture")
+        fake.assert_not_called()
+
+    def test_demo_extraction_uses_the_live_model_and_falls_back_to_the_fixture(self):
+        self.with_patches(*live_llm())
+        answer = {"rules": [{"id": "r1", "title": "Owner threshold", "condition": "cardamom stock falls below 50 kg", "action": "alert the owner",
+                             "source_quote": "When cardamom stock falls below 50 kg, the app should alert me to reorder."},
+                            {"id": "r2", "title": "Manager threshold", "condition": "stock goes below 100 kg", "action": "send the reorder alert",
+                             "source_quote": "The reorder alert should come when stock goes below 100 kg"}],
+                  "conflicts": [{"rule_ids": ["r1", "r2"], "topic": "threshold", "explanation": "50 vs 100"}], "review_notes": []}
+        with patch.object(llm, "complete_json", new=AsyncMock(return_value=answer)):
+            body = self.client.post("/api/extract", json={"transcript": EN, "mode": "business", "demo": True}).json()
+        self.assertTrue(body["demo"])
+        self.assertNotEqual(body["brain"], "demo fixture")
+        self.assertEqual([r["speaker"] for r in body["rules"]], ["Owner", "Manager"])
+        self.assertEqual(body["conflicts"][0]["rule_ids"], ["r1", "r2"])
+        with patch.object(llm, "complete_json", new=AsyncMock(side_effect=RuntimeError("503"))):
+            body = self.client.post("/api/extract", json={"transcript": EN, "mode": "business", "demo": True}).json()
+        self.assertEqual(body["brain"], "demo fixture")
+        self.assertEqual(len(body["rules"]), 5)
+        # Other demo transcripts (not the meeting) and edited meeting text stay on the fixture rules.
+        with patch.object(llm, "complete_json", new=AsyncMock(return_value=answer)) as fake:
+            self.assertEqual(self.client.post("/api/extract", json={"transcript": EN.replace("50", "60"), "demo": True}).status_code, 422)
+        fake.assert_not_called()

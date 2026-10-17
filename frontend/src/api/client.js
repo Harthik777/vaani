@@ -1,7 +1,8 @@
 import { FALLBACK_RULES, DEMO_TRANSCRIPT } from "../data/mock.js";
 import { CHECKLIST, MEETING, meetingLanguage } from "../data/brd.js";
 import { verifyRule } from "../data/verify.js";
-export const BASE = import.meta.env?.VITE_API_BASE || "http://localhost:8000";
+const served = typeof location !== "undefined" && /^https?:$/.test(location.protocol) && location.pathname.startsWith("/app");
+export const BASE = import.meta.env?.VITE_API_BASE || (served ? location.origin : "http://localhost:8000");
 const OFFLINE = "Backend unavailable. Start the API to use recording transcription, publishing or tickets.";
 
 async function request(path, { body, key, method = "GET", binary = false, timeout = 65000 } = {}) {
@@ -112,6 +113,7 @@ export const api = {
   },
   publish: (body, key) => post("/api/portals", body, { key }),
   transliterate: body => post("/api/transliterate", body, { timeout: 60000 }),
+  demoVoices: lang => post("/api/demo/voices", { lang }, { timeout: 90000 }),
   async help(body) {
     try { return await post("/api/help", body, { timeout: 40000 }); }
     catch (e) {

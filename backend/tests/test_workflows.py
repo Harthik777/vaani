@@ -15,10 +15,13 @@ class WorkflowTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.directory = patch.object(config, "DATA_DIR", Path(self.tmp.name))
         self.directory.start()
+        self.offline = patch.object(config, "USE_REAL_LLM", False)  # tests never reach the network
+        self.offline.start()
         self.client = TestClient(app)
 
     def tearDown(self):
         self.client.close()
+        self.offline.stop()
         self.directory.stop()
         self.tmp.cleanup()
 

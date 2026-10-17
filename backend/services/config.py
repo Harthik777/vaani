@@ -69,6 +69,9 @@ SARVAM_LLM_MODEL = os.getenv("SARVAM_LLM_MODEL", "sarvam-105b-conversations")
 SARVAM_LLM_MAX_TOKENS = int(os.getenv("SARVAM_LLM_MAX_TOKENS", "3000"))  # Starter plan caps at 4096; reasoning counts
 SARVAM_LLM_TIMEOUT = float(os.getenv("SARVAM_LLM_TIMEOUT", "8"))
 CACHE_ENABLED = os.getenv("VAANI_CACHE", "on").strip().lower() not in {"off", "false", "0"}
+# The two-speaker meeting demo runs through the real agent and extraction when a model is configured (the fixture is the
+# offline path and the safety net if a call fails). VAANI_DEMO_LIVE=off pins the demo to the fixture.
+DEMO_LIVE = os.getenv("VAANI_DEMO_LIVE", "on").strip().lower() not in {"off", "false", "0"}
 
 # LLM_PROVIDER=sarvam makes Sarvam's own chat model the main brain (no second key needed).
 if os.getenv("LLM_PROVIDER", "").strip().lower() == "sarvam" and SARVAM_API_KEY:
@@ -89,6 +92,23 @@ PAYTM_KEY = os.getenv("PAYTM_KEY", "")
 PAYTM_ENV = os.getenv("PAYTM_ENV", "staging")
 DATA_DIR = Path(os.getenv("VAANI_DATA_DIR", str(Path(__file__).resolve().parents[1] / "data")))
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+FRONTEND_URL_SET = bool(os.getenv("FRONTEND_URL"))
+# Share links must open on a phone. PUBLIC_URL (e.g. a Cloudflare quick tunnel: `cloudflared tunnel --url http://localhost:8000`)
+# wins; otherwise the backend serves the built frontend at /app on the laptop's LAN address for phones on the same Wi-Fi.
+PUBLIC_URL = os.getenv("PUBLIC_URL", "").strip().rstrip("/")
+
+
+def lan_ip() -> str:
+    """The address other devices on this network use to reach this machine (no packet is sent)."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except OSError:
+        return "127.0.0.1"
 PUBLIC_API_URL = os.getenv("PUBLIC_API_URL", "http://localhost:8000")
 PUBLISH_API_KEY = os.getenv("PUBLISH_API_KEY", "")
 WORK_ORDER_URL = os.getenv("WORK_ORDER_URL", "")

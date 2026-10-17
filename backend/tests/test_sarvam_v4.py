@@ -24,7 +24,7 @@ class SarvamV4Tests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.patches = [patch.object(config, "DATA_DIR", Path(self.tmp.name)), patch.object(config, "CACHE_ENABLED", True),
-                        patch.object(config, "USE_REAL_SARVAM", True), patch.object(config, "SARVAM_API_KEY", "k")]
+                        patch.object(config, "USE_REAL_SARVAM", True), patch.object(config, "SARVAM_API_KEY", "k"), patch.object(config, "USE_REAL_LLM", False)]
         for p in self.patches:
             p.start()
         sarvam._chat_failures, sarvam._chat_paused_until = 0, 0.0

@@ -65,7 +65,11 @@ def _check(r):
         raise SarvamError("Sarvam rejected the API key (invalid_api_key). Put a current key from dashboard.sarvam.ai in backend/.env and restart the backend.", 403)
     if r.status_code == 429:
         raise SarvamError("Sarvam rate limit reached. Retry in a few seconds.", 429)
-    _check(r)
+    try:
+        detail = (r.json().get("error") or {}).get("message", "")[:200]
+    except ValueError:
+        detail = r.text[:200]
+    raise SarvamError(f"Sarvam returned {r.status_code}: {detail or 'no detail'}", 502 if r.status_code >= 500 else r.status_code)
 
 
 def _headers():
@@ -146,11 +150,11 @@ def _sentences(text):
     return [s for s in out if s]
 
 
-async def synthesize(text, lang, dict_id=None):
+async def synthesize(text, lang, dict_id=None, speaker=None):
     """Returns base64 WAV clips, one per <=2500-char piece, in order. Clips are cached on disk, so a
     rehearsal makes the same sentence instant on stage. dict_id: optional Bulbul pronunciation dictionary."""
     clips = []
-    speaker = speaker_for(lang)
+    speaker = speaker or speaker_for(lang)
     async with httpx.AsyncClient(timeout=60) as client:
         for piece in split_text(text, TTS_LIMIT):
             key = cache.key(config.SARVAM_TTS_MODEL, speaker, LANG_CODES[lang], piece, dict_id or "")

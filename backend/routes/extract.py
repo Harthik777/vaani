@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from models import Mode, Rule
 import mocks
-from services import llm, verify
+from services import config, llm, verify
 from services.agent import meeting_language, speaker_of, validate_conflicts
 
 router = APIRouter()
@@ -46,20 +46,38 @@ def _ground_quote(r, transcript):
     return r
 
 
+def _demo_response(body, result):
+    rules = result["rules"]
+    for r in rules:
+        r["verification"] = verify.verify_rule(r, body.transcript)
+    meeting = meeting_language(body.transcript) and body.mode == "business"
+    return {"rules": rules, "review_notes": result.get("review_notes", []), "rejected": [], "demo": True, "brain": "demo fixture",
+            "conflicts": validate_conflicts(mocks.MEETING["conflicts"], rules) if meeting else []}
+
+
 @router.post("/api/extract")
 async def extract(body: ExtractIn):
+    # The meeting demo goes through the real model when one is configured (the fixture is the safety net), so what the
+    # audience sees is live extraction, with the same conflict catch. Other demo transcripts and edits stay on fixtures.
+    if body.demo and body.mode == "business" and meeting_language(body.transcript) and llm.live() and config.DEMO_LIVE and _demo(body) is not None:
+        try:
+            live = await _live(body)
+            live["demo"] = True
+            return live
+        except Exception as exc:
+            log.warning("live extraction of the demo failed (%s); using the demo fixture", exc)
+            return _demo_response(body, _demo(body))
     if body.demo:
         result = _demo(body)
         if result is None:
             raise HTTPException(422, "Edited input requires live extraction or manual rule entry")
-        rules = result["rules"]
-        for r in rules:
-            r["verification"] = verify.verify_rule(r, body.transcript)
-        meeting = meeting_language(body.transcript) and body.mode == "business"
-        return {"rules": rules, "review_notes": result.get("review_notes", []), "rejected": [], "demo": True, "brain": "demo fixture",
-                "conflicts": validate_conflicts(mocks.MEETING["conflicts"], rules) if meeting else []}
+        return _demo_response(body, result)
     if not llm.live():
         raise HTTPException(503, "Live extraction is not configured. Enter rules manually or choose Use demo.")
+    return await _live(body)
+
+
+async def _live(body: ExtractIn):
     result, last = None, None
     for attempt in range(2):  # one retry: provider hiccups should not end a live demo
         try:

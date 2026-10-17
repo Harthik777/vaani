@@ -739,3 +739,5 @@ body.a11y-lowVision{font-size:19px}.a11y-lowVision .card,.a11y-lowVision .widget
 .fast-approve>div{flex:1 1 320px}.fast-approve h2{font-size:1.1rem;margin:0 0 4px}
 .fast-approve label{flex:1 1 200px}.fast-approve .btn{white-space:nowrap}
 .prefetch-note{font-style:italic}
+
+.synthetic-note{color:var(--mute);font-style:italic}
