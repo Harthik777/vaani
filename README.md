@@ -65,6 +65,9 @@ npm run build:standalone
 ```
 This writes `vaani-prototype.html`. The demo runs fully offline with sample data. Live AI and Sarvam features need the backend.
 
+## In-app guide
+A **? Help** button on every step answers "what do I do now?" in the selected language: deterministic step guide and FAQ without AI, Sarvam 105B with the step context when configured, read aloud by Bulbul on request.
+
 ## Measured accuracy
 ```bash
 cd Vaani_code/vaani-repo/backend
@@ -75,9 +78,9 @@ Last run (17 Oct 2026): verifier 66/66 planted errors caught, 0 false blocks on 
 ## Tests
 ```bash
 cd Vaani_code/vaani-repo/backend
-python -m unittest tests/test_workflows.py tests/test_brd_agent.py tests/test_sarvam_v4.py tests/test_meeting_notes.py tests/test_clarity_breadth.py
+python -m unittest tests/test_workflows.py tests/test_brd_agent.py tests/test_sarvam_v4.py tests/test_meeting_notes.py tests/test_clarity_breadth.py tests/test_help.py
 ```
-73 tests cover the verifier, agent, conflicts, BRD drafting, exports, Sarvam request shapes (v4 codemix and keyterms, v4-flash voices, the 105B request that answers, the cache, the circuit breaker, Kannada, meeting diarization and Doc AI notes) and access control.
+78 tests cover the verifier, agent, conflicts, BRD drafting, exports, Sarvam request shapes (v4 codemix and keyterms, v4-flash voices, the 105B request that answers, the cache, the circuit breaker, Kannada, meeting diarization and Doc AI notes) and access control.
 
 ```bash
 cd Vaani_code/vaani-repo/frontend

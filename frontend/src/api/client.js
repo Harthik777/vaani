@@ -109,6 +109,17 @@ export const api = {
   },
   publish: (body, key) => post("/api/portals", body, { key }),
   transliterate: body => post("/api/transliterate", body, { timeout: 60000 }),
+  async help(body) {
+    try { return await post("/api/help", body, { timeout: 40000 }); }
+    catch (e) {
+      if (!e.offline) throw e;
+      // No backend: a short orientation per step so the guide still works in the offline demo.
+      const steps = { landing: "Pick your language, then press Start capturing.", record: "Tap the microphone and describe what you need, or use the demo. Then press Next.",
+        interview: "Answer what the agent asks, or Skip. Then Extract requirements.", extract: "Check each card; red numbers were never said. Then Review and approve.",
+        signoff: "Approve or skip each requirement.", brd: "Download, switch language, publish for a QR code." };
+      return { answer: steps[body.phase] || steps.landing, brain: "guide (offline)", suggestions: [] };
+    }
+  },
   qrUrl: (data, size = 6) => BASE + "/api/qr.png?size=" + size + "&data=" + encodeURIComponent(data),
   portal: (id, key) => request("/api/portals/" + id, { key }),
   ticket: body => post("/api/tickets", body),

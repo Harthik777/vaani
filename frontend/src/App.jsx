@@ -17,6 +17,7 @@ import Portal from "./components/Portal.jsx";
 import Interview from "./components/Interview.jsx";
 import { ConflictCard, VerifierSummary, VerifyBadge } from "./components/Verifier.jsx";
 import useRecorder from "./components/useRecorder.js";
+import HelpBot from "./components/HelpBot.jsx";
 
 const PHASES = ["landing", "record", "interview", "extract", "signoff", "brd"];
 const PHASE_LABEL = { landing: "Start", record: "Speak", interview: "Agent questions", extract: "Review", signoff: "Approve", brd: "BRD + App" };
@@ -471,5 +472,7 @@ function Workspace() {
       docLang={s.docLang} translations={s.translations} onLanguage={(docLang, translations) => { patch({ docLang, translations }); generateApp({ ...serverBody, app_language: docLang, translations: translations || {} }); }}
       serverBody={serverBody} sarvamVoice={sarvamVoice} onSarvamUsed={markUsed} completeness={s.gaps?.completeness} a11y={s.a11y}
       shareUrl={s.published?.preview_url || s.published?.url} share={<SharePanel published={s.published} onPublish={publish} busy={busy} mode={s.mode} />} targetDevice={s.targetDevice} />}
+    <HelpBot phase={s.phase} lang={s.lang} langLabel={langLabel} sarvamVoice={sarvamVoice} a11y={s.a11y} onSarvamUsed={markUsed}
+      counts={{ requirements: s.rules.length, approved: approved.length, speakers: s.speakers.length, completeness: s.gaps?.completeness ?? 0, conflicts: visibleConflicts.length }} />
   </main>;
 }
