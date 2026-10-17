@@ -74,6 +74,11 @@ if os.getenv("LLM_PROVIDER", "").strip().lower() == "sarvam" and SARVAM_API_KEY:
 # falling back to the main LLM on any failure. A circuit breaker (services.sarvam) stops waiting on it after
 # two consecutive failures, so a bad key or outage costs at most two short timeouts.
 AGENT_LLM = os.getenv("AGENT_LLM", "sarvam").strip().lower()
+SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
+SMTP_PORT = os.getenv("SMTP_PORT", "587").strip()
+SMTP_USER = os.getenv("SMTP_USER", "").strip()
+SMTP_PASS = os.getenv("SMTP_PASS", "").strip()
+SMTP_FROM = os.getenv("SMTP_FROM", "").strip()
 PAYTM_MID = os.getenv("PAYTM_MID", "")
 PAYTM_KEY = os.getenv("PAYTM_KEY", "")
 PAYTM_ENV = os.getenv("PAYTM_ENV", "staging")

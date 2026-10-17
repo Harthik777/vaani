@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "./api/client.js";
+import { api, playClips, speak } from "./api/client.js";
 import { audioStore } from "./api/storage.js";
 import { LANGS, INTENT_MODES, MODE_DOMAIN } from "./data/mock.js";
 import { MEETING, clipFor, speakerLine, speakerOf } from "./data/brd.js";
@@ -96,6 +96,7 @@ function Workspace() {
   const setEditing = fn => patch({ editing: typeof fn === "function" ? fn(editing) : fn });
   const prefetched = useRef("");
   const heading = useRef(null), requestVersion = useRef(0), active = useRef(true), drafting = useRef(false);
+  const stateRef = useRef(null); stateRef.current = s;
   const patch = value => set(p => ({ ...p, ...value }));
   const invalidate = value => set(p => ({ ...p, ...value, approved: [], soIdx: 0, published: null, widgets: {}, ai: null, aiError: "", app: null, docLang: "english", translations: null }));
   const markUsed = flags => set(p => ({ ...p, sarvamUsed: { ...p.sarvamUsed, ...Object.fromEntries(Object.entries(flags).filter(([, v]) => v)) } }));
@@ -155,11 +156,11 @@ function Workspace() {
     } catch (e) { if (active.current && version === requestVersion.current) setError(e.message); }
     finally { if (active.current && version === requestVersion.current) setBusy(false); }
   };
-  const startInterview = () => { setError(""); patch({ phase: "interview" }); runGaps(s.tx, s.answers.map(a => a.key)); };
-  const saveAnswer = (question, text) => {
-    const tx = s.tx.includes(text) ? s.tx : [s.tx, speakerLine(s.speaker, text)].filter(Boolean).join("\n");
-    const answers = [...s.answers.filter(a => a.key !== question.key), { key: question.key, question: question.question, answer: text, speaker: s.speaker }];
-    patch({ tx, answers, draftAnswer: "", skipped: s.skipped.filter(k => k !== question.key), ai: null, app: null, published: null });
+  const startInterview = () => { const st = stateRef.current; setError(""); patch({ phase: "interview" }); runGaps(st.tx, st.answers.map(a => a.key)); };
+  const saveAnswer = (question, text) => { const st = stateRef.current;
+    const tx = st.tx.includes(text) ? st.tx : [st.tx, speakerLine(st.speaker, text)].filter(Boolean).join("\n");
+    const answers = [...s.answers.filter(a => a.key !== question.key), { key: question.key, question: question.question, answer: text, speaker: st.speaker }];
+    patch({ tx, answers, draftAnswer: "", skipped: st.skipped.filter(k => k !== question.key), ai: null, app: null, published: null });
     runGaps(tx, answers.map(a => a.key));
   };
 
@@ -173,9 +174,14 @@ function Workspace() {
       const names = out.speakers.map((n, i) => i === 0 ? "Owner" : i === 1 ? "Manager" : n);
       let tx = out.transcript;
       out.speakers.forEach((n, i) => { tx = tx.split("[" + n + "] ").join("[" + names[i] + "] "); });
-      const evidence = { ...out.evidence, local: false, duration: out.lines.reduce((m, l) => Math.max(m, l.end || 0), 0) || undefined, speaker: null, uploaded: true };
-      invalidate({ tx, demo: false, rules: [], answers: [], skipped: [], gaps: null, conflicts: [], rejected: [],
-        evidence: [evidence], speakers: names, speaker: names[0], sarvamUsed: { ...s.sarvamUsed, stt: true, diarization: true } });
+      const evidence = { ...out.evidence, local: false, duration: out.lines.reduce((m, l) => Math.max(m, l.end || 0), 0) || undefined, speaker: null, uploaded: true, session: s.evidence.filter(e => e.uploaded).length + 1 };
+      // Talk time per voice (seconds), merged across uploads: who drove the conversation.
+      const talk = { ...(s.talk || {}) };
+      out.lines.forEach((l, i) => { const name = names[out.speakers.indexOf(l.speaker)] || l.speaker; if (l.end != null && l.start != null) talk[name] = (talk[name] || 0) + (l.end - l.start); });
+      const merging = !!s.tx.trim() && !s.demo;
+      const mergedSpeakers = merging ? [...new Set([...s.speakers, ...names])] : names;
+      invalidate({ tx: merging ? s.tx + "\n" + tx : tx, demo: false, rules: [], answers: merging ? s.answers : [], skipped: merging ? s.skipped : [], gaps: null, conflicts: [], rejected: [],
+        evidence: merging ? [...s.evidence, evidence] : [evidence], speakers: mergedSpeakers, speaker: mergedSpeakers[0], talk, sarvamUsed: { ...s.sarvamUsed, stt: true, diarization: true } });
     } catch (e) { setError(e.message); }
     finally { setUploading(""); }
   };
@@ -204,6 +210,54 @@ function Workspace() {
       evidence: s.evidence.map(e => e.speaker === from ? { ...e, speaker: name } : e), rules: [], gaps: null });
   };
 
+  // ── "Play the demo": a narrated walkthrough of the meeting demo, for the pitch or as a backup if a voice fails ──
+  const [demoCaption, setDemoCaption] = useState(""), demoRun = useRef(false), stopNarration = useRef(null);
+  const until = (test, ms = 60000) => new Promise((resolve, reject) => { const t0 = Date.now(); const tick = () => { if (!demoRun.current) return reject(new Error("stopped")); if (test(stateRef.current)) return resolve(); if (Date.now() - t0 > ms) return reject(new Error("timed out")); setTimeout(tick, 200); }; tick(); });
+  const narrate = async text => {
+    setDemoCaption(text);
+    if (s.a11y === "deaf") { await new Promise(r => setTimeout(r, 2500)); return; }
+    try {
+      if (sarvamVoice) {
+        const result = await api.tts({ text, lang: s.lang, translate: s.lang !== "english" });
+        await new Promise(resolve => { stopNarration.current = playClips(result.audios, () => resolve()); });
+      } else { speak(text, "english"); await new Promise(r => setTimeout(r, Math.min(6000, 900 + text.length * 45))); }
+    } catch { await new Promise(r => setTimeout(r, 2000)); }
+  };
+  const stopDemo = () => { demoRun.current = false; stopNarration.current?.(); setDemoCaption(""); };
+  const playDemo = async () => {
+    if (demoRun.current) return;
+    demoRun.current = true; setError("");
+    try {
+      set(fresh("business", s.lang, s.a11y, s.targetDevice)); await until(st => st.phase === "landing");
+      patch({ phase: "record" }); await until(st => st.phase === "record");
+      await narrate("A spice wholesaler and his manager described the app they need, in their own language.");
+      useMeetingDemo(); await until(st => st.demo && st.tx.includes("[Manager]"));
+      await narrate("The agent checks the eight things a BRD needs and asks only for what is missing.");
+      startInterview(); await until(st => st.phase === "interview" && st.gaps);
+      for (let i = 0; i < 2; i++) {
+        const st = stateRef.current, q = (st.gaps?.questions || []).filter(x => !st.skipped.includes(x.key))[0];
+        if (!q) break;
+        const sample = st.gaps?.sample_answers?.[q.key];
+        if (!sample) break;
+        await narrate("The owner answers by voice. The meter climbs.");
+        saveAnswer(q, sample); await until(st2 => st2.answers.length === st.answers.length + 1 && st2.gaps && !busy, 90000);
+      }
+      await narrate("Every requirement quotes the speaker exactly. The owner said fifty kilos, the manager said one hundred. VAANI caught it, with both voices.");
+      await extract(); await until(st => st.phase === "extract" && st.rules.length > 0, 90000);
+      await narrate("Keep the manager's version. A number nobody said would be blocked in red.");
+      { const st = stateRef.current; const c = st.conflicts.find(x => !x.deferred); if (c) { const keep = st.rules.find(r => r.id === c.rule_ids[1]); const drop = c.rule_ids.find(id => id !== keep?.id); if (drop) updateRules(st.rules.filter(r => r.id !== drop)); } }
+      await new Promise(r => setTimeout(r, 600));
+      await narrate("Each requirement is approved after hearing it read back in the owner's language.");
+      patch({ phase: "signoff", metadata: { ...stateRef.current.metadata, reviewer: stateRef.current.metadata.reviewer || "Demo reviewer" } }); await until(st => st.phase === "signoff");
+      while (demoRun.current && stateRef.current.phase === "signoff") { decide(true); await new Promise(r => setTimeout(r, 350)); }
+      await until(st => st.phase === "brd");
+      await narrate("A twelve-section BRD with acceptance criteria, a Jira export, and a working first app. Scan the code to open it on your phone.");
+      setDemoCaption("Demo complete. Scroll down for the BRD and the app.");
+      setTimeout(() => setDemoCaption(""), 6000);
+    } catch (e) { if (e.message !== "stopped") setDemoCaption("Demo stopped: " + e.message); }
+    finally { demoRun.current = false; }
+  };
+
   // ── Background extraction while the interview is still going: the server caches by transcript, so the
   //    "Extract requirements" click is instant when the transcript has not changed since the last answer. ──
   const extractPrefetched = useRef("");
@@ -222,19 +276,19 @@ function Workspace() {
   }, [s.phase, s.tx, health?.live_llm, busy]);
 
   // ── Extraction, verification, conflicts ──
-  const extract = async () => {
+  const extract = async () => { const st = stateRef.current;
     setError(""); setBusy(true); invalidate({ phase: "extract", rules: [], reviewNotes: [], rejected: [], conflicts: [] });
     const version = ++requestVersion.current;
     try {
-      const result = await api.extract(s.tx, s.domain, s.mode, s.demo);
+      const result = await api.extract(st.tx, st.domain, st.mode, st.demo);
       if (!active.current || version !== requestVersion.current) return;
       const rules = result.rules.map(r => {
-        const e = r.source_quote ? s.evidence.find(e => e.transcript?.includes(r.source_quote)) : null;
-        return { ...r, quote_note: r.verification?.quote_note || null, speaker: r.speaker || speakerOf(r.source_quote, s.tx) || (e?.speaker ?? null), evidence_id: e?.id || null, ...clipFor(r.source_quote, e) };
+        const e = r.source_quote ? st.evidence.find(e => e.transcript?.includes(r.source_quote)) : null;
+        return { ...r, quote_note: r.verification?.quote_note || null, speaker: r.speaker || speakerOf(r.source_quote, st.tx) || (e?.speaker ?? null), evidence_id: e?.id || null, ...clipFor(r.source_quote, e) };
       });
       patch({ rules, reviewNotes: result.review_notes || [], rejected: result.rejected || [], demo: result.demo, extractBrain: result.brain });
       if (new Set(rules.map(r => r.speaker).filter(Boolean)).size >= 2) {
-        const found = await api.conflicts({ rules, transcript: s.tx, demo: result.demo }).catch(e => ({ conflicts: [], note: e.message }));
+        const found = await api.conflicts({ rules, transcript: st.tx, demo: result.demo }).catch(e => ({ conflicts: [], note: e.message }));
         if (active.current && version === requestVersion.current) patch({ conflicts: found.conflicts || [] });
       }
     } catch (e) { if (active.current && version === requestVersion.current) setError(e.message); }
@@ -249,13 +303,13 @@ function Workspace() {
     if (invalid) { setError(`Fix “${invalid.title || "untitled"}”: complete each field, copy the source text exactly, and use a valid clip range.`); return false; }
     return s.rules.length > 0;
   };
-  const decide = (approve, spoken = null) => {
-    if (!s.metadata.reviewer?.trim()) { setError("Enter the reviewer's name before recording a decision."); return; }
+  const decide = (approve, spoken = null) => { const st = stateRef.current;
+    if (!st.metadata.reviewer?.trim()) { setError("Enter the reviewer's name before recording a decision."); return; }
     setError("");
-    const r = s.rules[s.soIdx];
-    const next = approved.filter(a => a.id !== r.id);
-    if (approve) next.push({ ...r, approved_at: new Date().toISOString(), approved_by: spoken ? `${s.metadata.reviewer} · by voice ("${spoken}")` : s.metadata.reviewer });
-    patch({ approved: next, published: null, ai: null, app: null, aiError: "", docLang: "english", translations: null, voiceHeard: null, voiceNote: spoken ? `Heard "${spoken}" → ${approve ? "approved" : "skipped"}` : "", ...(s.soIdx + 1 >= s.rules.length ? { phase: "brd" } : { soIdx: s.soIdx + 1 }) });
+    const r = st.rules[st.soIdx];
+    const next = st.approved.filter(a => a.id !== r.id);
+    if (approve) next.push({ ...r, approved_at: new Date().toISOString(), approved_by: spoken ? `${st.metadata.reviewer} · by voice ("${spoken}")` : st.metadata.reviewer });
+    patch({ approved: next, published: null, ai: null, app: null, aiError: "", docLang: "english", translations: null, voiceHeard: null, voiceNote: spoken ? `Heard "${spoken}" → ${approve ? "approved" : "skipped"}` : "", ...(st.soIdx + 1 >= st.rules.length ? { phase: "brd" } : { soIdx: st.soIdx + 1 }) });
   };
   // Spoken sign-off: "haan / ಹೌದು / yes" approves, "nahi / ಇಲ್ಲ / no" skips. Anything else asks again. Buttons always remain.
   const voiceTimer = useRef(null);
@@ -374,6 +428,7 @@ function Workspace() {
         <fieldset className="choice-group"><legend>Accessibility</legend><div className="modes">{[["standard", "Standard"], ["lowVision", "Low vision"], ["deaf", "Deaf / HoH · type input"]].map(([c, label]) => <button aria-pressed={s.a11y === c} className={"mode" + (s.a11y === c ? " on" : "")} key={c} onClick={() => patch({ a11y: c })}>{label}</button>)}</div></fieldset>
       </details>
       <button className="btn btn-primary btn-full" onClick={() => patch({ phase: "record" })}>Start capturing →</button>
+      {s.mode === "business" && MEETING.transcript[s.lang] && <button className="btn btn-ghost btn-full demo-play" onClick={playDemo}>▶ Play the 2-minute narrated demo</button>}
     </>}
 
     {s.phase === "record" && <>
@@ -385,7 +440,7 @@ function Workspace() {
           <form className="add-speaker" onSubmit={e => { e.preventDefault(); addSpeaker(e.currentTarget.speaker.value); e.currentTarget.reset(); }}><input name="speaker" aria-label="Add speaker" placeholder="Add speaker (e.g. Manager)" /><button className="btn btn-ghost">Add</button></form>
         </div></fieldset>
         <div className="import-row">
-          <label className={"btn btn-ghost import-btn" + (locked || uploading ? " disabled" : "")}>📼 Upload a recorded meeting
+          <label className={"btn btn-ghost import-btn" + (locked || uploading ? " disabled" : "")}>📼 {s.evidence.some(e => e.uploaded) ? "Add another recording" : "Upload a recorded meeting"}
             <input type="file" accept="audio/*,video/mp4,.m4a,.mp3,.wav,.ogg,.webm" disabled={locked || !!uploading} onChange={e => { importMeeting(e.target.files?.[0]); e.target.value = ""; }} /></label>
           <label className={"btn btn-ghost import-btn" + (locked || uploading ? " disabled" : "")}>📝 Photo or PDF of notes
             <input type="file" accept="image/*,application/pdf" disabled={locked || !!uploading} onChange={e => { importNotes(e.target.files?.[0]); e.target.value = ""; }} /></label>
@@ -406,6 +461,10 @@ function Workspace() {
           <div className="mic-status"><Wave active={recorder.recording} />
             <p role="status">{recorder.recording ? `Listening to ${s.speaker}… tap the button to stop` : recorder.processing ? "" : `Tap the microphone and speak as ${s.speaker}`}{recorder.processing ? "Sarvam Saaras is transcribing " + recorder.processing + " segment(s)…" : ""}</p>
             <p className="mic-hint">Numbers, names and exceptions are kept exactly as spoken. Every segment is hashed and kept as evidence.</p></div>
+        </div>}
+        {s.talk && Object.keys(s.talk).length > 1 && <div className="talk-bar" aria-label="Talk time by speaker">
+          {(() => { const total = Object.values(s.talk).reduce((a, b) => a + b, 0) || 1; return Object.entries(s.talk).map(([name, secs], i) => <span key={name} className={"talk-seg spk-" + (i % 4)} style={{ width: (100 * secs / total) + "%" }} title={`${name}: ${Math.round(secs)} s`}>{name} {Math.round(100 * secs / total)}%</span>); })()}
+          <span className="source-note">who spoke how much, from Sarvam's speaker timestamps{s.evidence.filter(e => e.uploaded).length > 1 ? ` · ${s.evidence.filter(e => e.uploaded).length} recordings merged` : ""}</span>
         </div>}
         {transcriptLines.length > 0 && <ol className="feed" aria-label="What was said">{transcriptLines.map((l, i) => <li key={i} className={"feed-line" + (l.speaker ? " spk-" + (Math.max(0, s.speakers.indexOf(l.speaker)) % 4) : "")}>
           {l.speaker && <span className="speaker-chip">{l.speaker}</span>}<span lang={s.lang === "english" ? "en" : undefined}>{l.text}</span></li>)}</ol>}
@@ -470,8 +529,9 @@ function Workspace() {
       evidence={s.evidence} langs={LANGS} lang={s.lang} reset={reset} widgets={s.widgets} onWidgets={widgets => patch({ widgets })} metadata={metadata}
       ai={{ busy: aiBusy, error: s.aiError, stats: s.ai?.stats }} onRedraft={() => { patch({ ai: null, aiError: "", app: null, docLang: "english", translations: null }); }} onRegenerateApp={() => generateApp()}
       docLang={s.docLang} translations={s.translations} onLanguage={(docLang, translations) => { patch({ docLang, translations }); generateApp({ ...serverBody, app_language: docLang, translations: translations || {} }); }}
-      serverBody={serverBody} sarvamVoice={sarvamVoice} onSarvamUsed={markUsed} completeness={s.gaps?.completeness} a11y={s.a11y}
+      serverBody={serverBody} sarvamVoice={sarvamVoice} onSarvamUsed={markUsed} completeness={s.gaps?.completeness} a11y={s.a11y} emailEnabled={!!health?.email}
       shareUrl={s.published?.preview_url || s.published?.url} share={<SharePanel published={s.published} onPublish={publish} busy={busy} mode={s.mode} />} targetDevice={s.targetDevice} />}
+    {demoCaption && <div className="demo-caption" role="status"><span>{demoCaption}</span>{demoRun.current && <button className="btn-link" onClick={stopDemo}>Stop</button>}</div>}
     <HelpBot phase={s.phase} lang={s.lang} langLabel={langLabel} sarvamVoice={sarvamVoice} a11y={s.a11y} onSarvamUsed={markUsed}
       counts={{ requirements: s.rules.length, approved: approved.length, speakers: s.speakers.length, completeness: s.gaps?.completeness ?? 0, conflicts: visibleConflicts.length }} />
   </main>;

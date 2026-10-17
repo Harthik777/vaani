@@ -36,7 +36,7 @@ export function Document({ brd, evidence = [], portal, translations }) {
         {!!r.acceptance?.length && <div className="acceptance"><b>Acceptance criteria</b><ul>{r.acceptance.map((a, i) => <li key={i}>{a}</li>)}</ul></div>}
         <blockquote>{r.source_quote || "No source quote"}</blockquote>
         <SourceAudio evidence={evidence.find(e => e.id === r.evidence_id)} start={r.start} end={r.end} portal={portal}
-          caption={r.start != null ? `🔊 Hear ${r.speaker || "the speaker"} say it · ${r.start}s–${r.end}s` : undefined} />
+          caption={r.start != null ? `🔊 Hear ${r.speaker || "the speaker"} say it · ${r.start}s–${r.end}s` + (evidence.find(e => e.id === r.evidence_id)?.captured_at ? ` · said on ${new Date(evidence.find(e => e.id === r.evidence_id).captured_at).toLocaleDateString()}` : "") : undefined} />
         <p className="source-note">Approved by {r.approved_by || "pending"}{r.approved_at ? " · " + new Date(r.approved_at).toLocaleString() : ""}</p>
       </article>) : <p className="empty">No approved requirements.</p>}
     </section>
@@ -101,7 +101,7 @@ function summaryText(brd) {
 }
 
 export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, langs, lang, reset, widgets, onWidgets, metadata, share, shareUrl, targetDevice,
-  ai, onRedraft, onRegenerateApp, serverBody, sarvamVoice, onSarvamUsed, completeness, a11y, docLang, translations, onLanguage }) {
+  ai, onRedraft, onRegenerateApp, serverBody, sarvamVoice, onSarvamUsed, completeness, a11y, docLang, translations, onLanguage, emailEnabled }) {
   const [listenLang, setListenLang] = useState(lang);
   const [status, setStatus] = useState(""), [busy, setBusy] = useState("");
   const stop = useRef(null);
@@ -137,6 +137,25 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
     setBusy("docx"); setStatus("");
     try { download(fileName(brd) + ".docx", await api.docx(serverBody)); } catch (e) { setStatus(e.message); } finally { setBusy(""); }
   };
+  // Real PDF from the server (works on phones); the browser's print dialog remains the fallback.
+  const pdf = async () => {
+    setBusy("pdf"); setStatus("");
+    try { download(fileName(brd) + ".pdf", await api.pdf(serverBody)); }
+    catch (e) { setStatus(e.offline ? "Backend unavailable: opening the print dialog instead." : e.message); if (e.offline) window.print(); }
+    finally { setBusy(""); }
+  };
+  const excel = async () => {
+    setBusy("xlsx"); setStatus("");
+    try { download(fileName(brd) + "-traceability.xlsx", await api.xlsx(serverBody)); } catch (e) { setStatus(e.message); } finally { setBusy(""); }
+  };
+  const [emailTo, setEmailTo] = useState("");
+  const sendEmail = async () => {
+    setBusy("email"); setStatus("");
+    try {
+      const out = await api.email({ ...serverBody, to: emailTo.split(/[,;\s]+/).filter(Boolean) });
+      setStatus(`Emailed ${out.attachments.length} files to ${out.sent_to.join(", ")}.`);
+    } catch (e) { setStatus(e.message); } finally { setBusy(""); }
+  };
 
   return <div className="brd-final">
     <header className="brd-header"><div><div className="eyebrow">Business Requirements Document + generated web app</div><h1>{brd.project_name}</h1>
@@ -148,11 +167,18 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
     <section className="download-bar card" aria-label="Download BRD">
       <div><h2>⬇ Download BRD</h2><p className="source-note">{docLang === "english" ? "English." : `English with the ${docLabel} translation under each line (PDF, Word, Markdown).`} Jira CSV is always English, for the vendor.</p></div>
       <div className="brd-actions">
-        <button className="btn btn-pdf" onClick={() => window.print()}>PDF</button>
+        <button className="btn btn-pdf" disabled={busy === "pdf"} onClick={pdf}>{busy === "pdf" ? "Preparing…" : "PDF"}</button>
         <button className="btn btn-primary" disabled={busy === "docx"} onClick={word}>{busy === "docx" ? "Preparing…" : "Word (.docx)"}</button>
         <button className="btn btn-ghost" onClick={() => download(fileName(brd) + (docLang === "english" ? "" : "-" + docLang) + ".md", toMarkdown(brd, translations), "text/markdown;charset=utf-8")}>Markdown</button>
         <button className="btn btn-ghost" onClick={() => download(fileName(brd) + "-jira.csv", "\ufeff" + toJiraCsv(brd), "text/csv;charset=utf-8")}>Jira CSV</button>
+        <button className="btn btn-ghost" disabled={busy === "xlsx"} onClick={excel}>{busy === "xlsx" ? "Preparing…" : "Excel RTM"}</button>
+        <button className="btn btn-ghost" onClick={() => window.print()} title="Browser print dialog">Print</button>
       </div>
+      {emailEnabled && <form className="email-form" onSubmit={e => { e.preventDefault(); sendEmail(); }}>
+        <label htmlFor="email-to">Email the pack (PDF, Word, Excel)</label>
+        <div className="email-row"><input id="email-to" value={emailTo} placeholder="vendor@example.com, owner@example.com" onChange={e => setEmailTo(e.target.value)} />
+          <button className="btn btn-primary" disabled={busy === "email" || !emailTo.trim()}>{busy === "email" ? "Sending…" : "Send"}</button></div>
+      </form>}
     </section>
 
     <div className={"ai-bar" + (ai.error ? " ai-error" : "")} role="status">

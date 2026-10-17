@@ -48,6 +48,8 @@ Then voice sign-off, then the BRD and app. Say "voice-first BRD" last, not first
 
 **If a judge asks "how would a shop owner know what to do?":** press **? Help** on any step; it answers in the owner's language on Sarvam 105B, and offline from the built-in guide.
 
+**Backup for the live voice:** the landing page's *Play the 2-minute narrated demo* runs the whole flow with Bulbul narration. If a microphone or a voice fails on stage, press it and talk over it.
+
 ## Live-demo safety
 - **Rehearse the exact demo once before the pitch with the backend running.** LLM drafts, Bulbul audio and translations are cached on disk (`backend/data/cache`), so the identical stage run is instant. Only live microphone speech is truly live.
 - Backup: the meeting demo also runs with **no backend** (sample data, labelled DEMONSTRATION), and so does `vaani-prototype.html`.
