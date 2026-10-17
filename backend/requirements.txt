@@ -7,3 +7,4 @@ python-dotenv>=1.0,<2
 Pillow==12.2.0
 python-docx==1.2.0
 sarvamai>=0.1.37
+qrcode[pil]>=7.4

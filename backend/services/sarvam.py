@@ -121,25 +121,113 @@ def _sentences(text):
     return [s for s in out if s]
 
 
-async def synthesize(text, lang):
+async def synthesize(text, lang, dict_id=None):
     """Returns base64 WAV clips, one per <=2500-char piece, in order. Clips are cached on disk, so a
-    rehearsal makes the same sentence instant on stage."""
+    rehearsal makes the same sentence instant on stage. dict_id: optional Bulbul pronunciation dictionary."""
     clips = []
     speaker = speaker_for(lang)
     async with httpx.AsyncClient(timeout=60) as client:
         for piece in split_text(text, TTS_LIMIT):
-            key = cache.key(config.SARVAM_TTS_MODEL, speaker, LANG_CODES[lang], piece)
+            key = cache.key(config.SARVAM_TTS_MODEL, speaker, LANG_CODES[lang], piece, dict_id or "")
             hit = cache.get("tts", key)
             if hit:
                 clips.extend(hit)
                 continue
             r = await client.post(f"{SARVAM_BASE}/text-to-speech", headers=_headers(),
-                json={"text": piece, "language_code": LANG_CODES[lang], "model": config.SARVAM_TTS_MODEL, "speaker": speaker})
+                json={"text": piece, "language_code": LANG_CODES[lang], "model": config.SARVAM_TTS_MODEL, "speaker": speaker, **({"dict_id": dict_id} if dict_id else {})})
             r.raise_for_status()
             audios = r.json()["audios"]
             cache.put("tts", key, audios)
             clips.extend(audios)
     return clips
+
+
+MAYURA_LANGS = {"hindi", "marathi", "tamil", "telugu", "bengali", "kannada", "english"}
+_dicts: dict[str, str] = {}
+
+
+async def text_lid(text):
+    """Sarvam text language identification: {language_code, script_code} (script Latn means Roman-script input)."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{SARVAM_BASE}/text-lid", headers=_headers(), json={"input": (text or "")[:1000]})
+        r.raise_for_status()
+        return r.json()
+
+
+async def transliterate(text, target, source="english"):
+    """Roman-script Hindi/Kannada ("delivery 2 ghante me") -> native script, line by line, numerals kept as digits.
+    Lines that are already in native script are left untouched."""
+    out = []
+    async with httpx.AsyncClient(timeout=60) as client:
+        for line in (text or "").split("\n"):
+            body = line
+            prefix = ""
+            m = re.match(r"^(\[[^\]]{1,60}\]\s*)(.*)$", line)
+            if m:
+                prefix, body = m.group(1), m.group(2)
+            if not body.strip() or not re.search(r"[A-Za-z]", body) or re.search(r"[ऀ-෿]", body):
+                out.append(line)
+                continue
+            r = await client.post(f"{SARVAM_BASE}/transliterate", headers=_headers(),
+                json={"input": body[:1000], "source_language_code": LANG_CODES[source], "target_language_code": LANG_CODES[target],
+                      "numerals_format": "international", "spoken_form": False})
+            r.raise_for_status()
+            out.append(prefix + r.json().get("transliterated_text", body))
+    return "\n".join(out)
+
+
+async def translate_colloquial(text, target, source="english", mode="code-mixed"):
+    """Owner-facing register (mayura:v1 supports modes; 11 languages, 1000 chars). Falls back to formal translate."""
+    if not text.strip() or target == source or target not in MAYURA_LANGS:
+        return await translate(text, target, source)
+    out = []
+    async with httpx.AsyncClient(timeout=60) as client:
+        for piece in split_text(text, 1000):
+            r = await client.post(f"{SARVAM_BASE}/translate", headers=_headers(),
+                json={"input": piece, "source_language_code": LANG_CODES[source], "target_language_code": LANG_CODES[target],
+                      "model": "mayura:v1", "mode": mode, "numerals_format": "international"})
+            if r.status_code >= 400:
+                return await translate(text, target, source)
+            out.append(r.json()["translated_text"])
+    return " ".join(out)
+
+
+def acronym_pronunciations(terms):
+    """'HDFC' -> 'H D F C', 'UPI' -> 'U P I': the read-back spells acronyms instead of guessing a word."""
+    out = {}
+    for t in terms or []:
+        t = str(t).strip()
+        if 2 <= len(t) <= 6 and t.isupper() and t.isalpha():
+            out[t] = " ".join(t)
+    return out
+
+
+async def pronunciation_dict(lang, terms):
+    """Create (once per session) a Bulbul pronunciation dictionary for the session's acronyms. Returns dict_id or None.
+    POST /text-to-speech/pronunciation-dictionary, multipart JSON file; limits 100 words, 10 dicts per user."""
+    pron = acronym_pronunciations(terms)
+    if not pron or not enabled():
+        return None
+    key = cache.key(lang, json.dumps(pron, sort_keys=True))
+    if key in _dicts:
+        return _dicts[key]
+    hit = cache.get("prondict", key)
+    if hit:
+        _dicts[key] = hit
+        return hit
+    payload = json.dumps({"pronunciations": {LANG_CODES[lang]: pron}}).encode("utf-8")
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(f"{SARVAM_BASE}/text-to-speech/pronunciation-dictionary", headers=_headers(),
+                                  files={"file": ("dict.json", payload, "application/json")})
+            r.raise_for_status()
+            dict_id = r.json().get("dictionary_id") or r.json().get("dict_id")
+    except Exception:
+        return None
+    if dict_id:
+        _dicts[key] = dict_id
+        cache.put("prondict", key, dict_id)
+    return dict_id
 
 
 async def translate(text, target, source="english"):

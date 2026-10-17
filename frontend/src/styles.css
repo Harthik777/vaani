@@ -672,3 +672,13 @@ body.a11y-lowVision{font-size:19px}.a11y-lowVision .card,.a11y-lowVision .widget
 @media print{.vendor-pack{break-inside:avoid}}
 
 .wa-send{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}.wa-send .btn{margin:8px 0}
+
+.num-vague{background:var(--lav);border-color:var(--lav-ln);color:var(--body);white-space:normal}
+
+.hear-clip .source-audio{margin:6px 0 0;min-width:220px}
+
+/* ── QR hand-off ───────────────────────────────────────────────────── */
+.qr-row{display:flex;gap:18px;flex-wrap:wrap;margin:14px 0 4px}
+.qr-row figure{margin:0;text-align:center;font-size:.78rem;color:var(--mute);max-width:180px}
+.qr-row img{display:block;border:1px solid var(--line);border-radius:6px;background:#fff;padding:4px;width:168px;height:168px;margin:0 auto 6px}
+@media print{.qr-row{display:flex}}

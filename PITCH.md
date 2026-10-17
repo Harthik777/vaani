@@ -28,10 +28,10 @@ Then voice sign-off, then the BRD and app. Say "voice-first BRD" last, not first
 
 1. *Next: agent checks for gaps.* "It found the goal, features and constraints, with the exact words. It is missing users, timeline, budget, success measure and sign-off." Let it **ask aloud** (Sarvam Translate + Bulbul). Record or *Use sample answer*, save. "The meter climbs."
 2. *Extract requirements.* **"Watch this:"** "The owner said 50 kg; the manager said 100 kg. Vaani caught the contradiction, with both voices." Keep the manager's version.
-3. **The verifier, live.** Type `48` into a rule: "⛔ 48 (not spoken). The AI can't sneak a number in, and neither can we." Undo it.
+3. **The verifier, live.** Type `48` into a rule: "⛔ 48 (not spoken). The AI can't sneak a number in, and neither can we." Undo it. Point at a 🔎 chip: "And it won't let 'jaldi' into a contract either; it asks how many hours."
 4. **Approve by voice.** Play the original clip, let Bulbul read the rule back in the owner's language, then press *Say haan or nahi to decide* and say "हाँ" (or "ಹೌದು"). The requirement is approved with the spoken word recorded against it; the BRD shows "by voice (हाँ)". Do this once; use the buttons for the rest.
 5. **BRD + App:** "12 sections, FR-IDs, acceptance criteria, open questions." Show the **verification report**: "Anything the AI wrote that nobody said is blocked here." Switch BRD + app to हिंदी / ಕನ್ನಡ in one click. *Listen to BRD summary*. **⬇ Download**: Word (bilingual), **Jira CSV** ("the vendor gets tickets"). Click around the generated app, or the requirement simulator (move the slider below 100 kg, the alert fires).
-6. *Publish* → **WhatsApp** button: "The owner gets the portal link on WhatsApp."
+6. *Publish* → two **QR codes** appear: "Scan this and the BRD with the voice clips opens on your phone." Hand the laptop to a judge for the scan. Then the **WhatsApp** button (Twilio send if configured, otherwise the prefilled link).
 
 **[3:40–4:30] Why it is different (one slide).**
 "ChatPRD, Jira Rovo and Notion take typed English from product managers and never verify. Lovable and Bolt take typed English prompts. Paytm Soundbox and Khatabook answer questions; they don't build software. Nobody interviews, verifies spoken numbers, or detects two stakeholders disagreeing." Do not name other teams in the room.

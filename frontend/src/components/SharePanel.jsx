@@ -15,6 +15,10 @@ export default function SharePanel({ published, onPublish, busy, mode, whatsapp,
     <button className="btn btn-primary" disabled={busy || !!published} onClick={() => onPublish("")}>{published ? "✓ Version published" : "Publish reviewed version"}</button>
     {published && <><label>Shareable URL<input readOnly value={url} onFocus={e => e.target.select()} /></label>
       <a className="portal-direct-link" href={published.url} target="_blank" rel="noreferrer">Open responsive portal ↗</a>
+      <div className="qr-row">
+        <figure><img src={api.qrUrl(url)} alt="QR code for the portal link" width="168" height="168" onError={e => { e.currentTarget.closest("figure").hidden = true; }} /><figcaption>Scan to open the BRD and voice clips</figcaption></figure>
+        <figure><img src={api.qrUrl("https://wa.me/?text=" + encodeURIComponent((title ? title + " · " : "") + "Vaani BRD: " + url))} alt="QR code that opens WhatsApp with the link" width="168" height="168" onError={e => { e.currentTarget.closest("figure").hidden = true; }} /><figcaption>Scan to forward on WhatsApp</figcaption></figure>
+      </div>
       <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
         <button className="btn btn-ghost" style={{ flex: 1 }} onClick={async () => { try { await navigator.clipboard.writeText(url); setMessage("Link copied to clipboard."); } catch { setMessage("Select and copy the URL above."); } }}>Copy link</button>
         <a className="btn btn-ghost" style={{ flex: 1, textDecoration: "none", textAlign: "center" }} target="_blank" rel="noreferrer" href={"https://wa.me/?text=" + encodeURIComponent("Vaani Portal: " + url)}>WhatsApp</a>

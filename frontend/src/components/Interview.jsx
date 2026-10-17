@@ -4,7 +4,7 @@ import { api, playClips, speak } from "../api/client.js";
 const ICON = { covered: "✅", answered: "🗣️", missing: "⬜", skipped: "⏭️" };
 
 // The BRD agent: shows what is already covered (with the exact words), asks for what is missing, by voice.
-export default function Interview({ gaps, busy, lang, langLabel, a11y, sarvamVoice, recorder, draft, onDraft, skipped, onSave, onSkip, onRetry, onContinue, onVoiceUsed, demo }) {
+export default function Interview({ gaps, busy, lang, langLabel, a11y, sarvamVoice, recorder, draft, onDraft, skipped, onSave, onSkip, onRetry, onContinue, onVoiceUsed, demo, keyterms = [] }) {
   const [voiceMessage, setVoiceMessage] = useState("");
   const [speaking, setSpeaking] = useState(false);
   const [autoAsk, setAutoAsk] = useState(a11y !== "deaf");
@@ -26,7 +26,7 @@ export default function Interview({ gaps, busy, lang, langLabel, a11y, sarvamVoi
         return;
       }
       // A translated question is spoken as-is; otherwise Sarvam translates the English question first.
-      const result = await api.tts({ text, lang, translate: !q.question_local && lang !== "english" });
+      const result = await api.tts({ text, lang, translate: !q.question_local && lang !== "english", keyterms });
       onVoiceUsed?.(result.translated);
       stop.current = playClips(result.audios, error => { setSpeaking(false); if (error) setVoiceMessage(error.message); });
     } catch (e) { setSpeaking(false); setVoiceMessage(e.message); }

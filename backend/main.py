@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routes import extract, brd, screenspec, tts, upi, stt, evidence, portals, tickets, agent, app_gen, notes, whatsapp as whatsapp_routes
+from routes import extract, brd, screenspec, tts, upi, stt, evidence, portals, tickets, agent, app_gen, notes, qr, whatsapp as whatsapp_routes
 from services import config, llm, sarvam, whatsapp
 from services.limiter import InMemoryRateLimiter
 
@@ -27,7 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for module in (stt, notes, extract, agent, screenspec, brd, tts, app_gen, upi, evidence, portals, tickets, whatsapp_routes):
+for module in (stt, notes, extract, agent, screenspec, brd, tts, app_gen, upi, evidence, portals, tickets, whatsapp_routes, qr):
     app.include_router(module.router)
 
 

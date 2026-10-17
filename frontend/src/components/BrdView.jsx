@@ -58,7 +58,14 @@ export function Document({ brd, evidence = [], portal, translations }) {
 
 // One screen the IT vendor actually receives: every requirement with its acceptance criteria, who said it,
 // whether it was verified, plus the open questions. Prints cleanly and matches the Jira CSV.
-export function VendorPack({ brd, translations }) {
+const fmt = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
+function HearClip({ evidence, start, end }) {
+  const [open, setOpen] = useState(false);
+  return <span className="hear-clip"><button className="play" onClick={() => setOpen(o => !o)}>🔊 {fmt(start)}–{fmt(end)}</button>
+    {open && <SourceAudio evidence={evidence} start={start} end={end} caption=" " />}</span>;
+}
+
+export function VendorPack({ brd, translations, evidence = [] }) {
   const rules = brd.business_rules || [];
   const verified = rules.filter(r => r.verification?.status === "verified").length;
   const confirm = rules.filter(r => ["needs_confirmation", "unsupported_number"].includes(r.verification?.status)).length;
@@ -73,13 +80,14 @@ export function VendorPack({ brd, translations }) {
         <div><dt>Open questions</dt><dd>{brd.open_questions?.length || 0}</dd></div>
       </dl></div>
     <div className="tbl"><table className="vendor-table">
-      <thead><tr><th>ID</th><th>Requirement</th><th>Said by</th><th>Acceptance</th><th>Status</th></tr></thead>
+      <thead><tr><th>ID</th><th>Requirement</th><th>Said by</th><th>Acceptance</th><th>Status</th><th>Evidence</th></tr></thead>
       <tbody>{rules.map(r => <tr key={r.id}>
         <td className="n"><span className="fr-id">{r.req_id}</span></td>
         <td><b>{r.title}</b><div className="logic">{r.rule}</div>{translations?.[r.rule] && <span className="tr">{translations[r.rule]}</span>}</td>
         <td>{r.speaker ? <span className="speaker-chip">{r.speaker}</span> : <span className="source-note">—</span>}</td>
         <td>{r.acceptance?.length ? <ol className="vendor-ac">{r.acceptance.map((a, i) => <li key={i}>{a}</li>)}</ol> : <span className="source-note">To be written</span>}</td>
         <td><span className={"vp-status vp-" + (r.verification?.status || "none")}>{r.verification?.status === "verified" ? "Verified" : r.verification?.status === "needs_confirmation" ? "Confirm number" : r.verification?.status === "unsupported_number" ? "Unspoken number" : r.verification?.status === "rejected" ? "Quote mismatch" : "—"}</span></td>
+        <td className="n">{r.start != null && evidence.find(e => e.id === r.evidence_id) ? <HearClip evidence={evidence.find(e => e.id === r.evidence_id)} start={r.start} end={r.end} /> : <span className="source-note">{r.source_quote ? "quote only" : "—"}</span>}</td>
       </tr>)}</tbody></table></div>
     {!!brd.open_questions?.length && <div className="vendor-open"><b>Open questions for the client</b><ol>{brd.open_questions.map((q, i) => <li key={i}>{q}</li>)}</ol></div>}
   </section>;
@@ -163,7 +171,7 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
       {status && <span className="source-note">{status}</span>}
     </div>
 
-    <VendorPack brd={brd} translations={translations} />
+    <VendorPack brd={brd} translations={translations} evidence={evidence} />
     <div className="brd-dual">
       <div className="brd-doc-column"><Document brd={brd} evidence={evidence} translations={translations} /></div>
       <aside className="brd-app-col">

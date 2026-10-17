@@ -37,7 +37,7 @@ async def send(body: SendIn):
     summary_local, media_url, audio_note = body.summary, None, None
     if body.summary and body.lang != "english" and sarvam.enabled():
         try:
-            summary_local = await sarvam.translate(body.summary, body.lang)
+            summary_local = await sarvam.translate_colloquial(body.summary, body.lang)  # owner's register, not the vendor's
         except Exception:
             summary_local = body.summary
     if body.with_audio and summary_local and sarvam.enabled():

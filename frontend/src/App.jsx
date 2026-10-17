@@ -177,6 +177,13 @@ function Workspace() {
     } catch (e) { setError(e.message); }
     finally { setUploading(""); }
   };
+  // Roman-script Hindi/Kannada ("delivery 2 ghante me") typed or pasted -> native script via Sarvam.
+  const romanLines = s.lang !== "english" && /[A-Za-z]{3,}/.test(s.tx) && !/[\u0900-\u0DFF]/.test(s.tx.replace(/^\[[^\]]*\]/gm, ""));
+  const toNativeScript = async () => {
+    setError(""); setUploading("Sarvam is converting Roman script to " + langLabel + "…");
+    try { const out = await api.transliterate({ text: s.tx, target: s.lang }); if (out.changed) invalidate({ tx: out.text, rules: [], gaps: null }); else setError("Nothing to convert."); }
+    catch (e) { setError(e.message); } finally { setUploading(""); }
+  };
   const renameSpeaker = (from, to) => {
     const name = to.trim().slice(0, 40);
     if (!name || name === from || s.speakers.includes(name)) return;
@@ -371,6 +378,7 @@ function Workspace() {
           <span className="import-hint">Sarvam separates the speakers in a recording and reads handwritten notes.</span>
         </div>
         {uploading && <p role="status" className="agent-thinking">⏳ {uploading}</p>}
+        {romanLines && !uploading && <p className="rename-row"><span>Typed in Roman script?</span><button className="btn btn-ghost" disabled={locked} onClick={toNativeScript}>Convert to {langLabel} script (Sarvam)</button></p>}
         {s.evidence.some(e => e.speaker === null) && s.speakers.some(n => /^Speaker \d+$/.test(n)) && <div className="rename-row">
           <span>Name the speakers:</span>
           {s.speakers.filter(n => /^Speaker \d+$/.test(n)).map(n => <form key={n} className="add-speaker" onSubmit={e => { e.preventDefault(); renameSpeaker(n, e.currentTarget.name_input.value); }}>
@@ -404,7 +412,7 @@ function Workspace() {
       <Interview gaps={s.gaps} busy={busy} lang={s.lang} langLabel={langLabel} a11y={s.a11y} sarvamVoice={sarvamVoice} recorder={recorder} demo={s.demo}
         draft={s.draftAnswer} onDraft={draftAnswer => patch({ draftAnswer })} skipped={s.skipped} onSave={saveAnswer}
         onSkip={key => patch({ skipped: [...new Set([...s.skipped, key])], draftAnswer: "" })} onRetry={() => runGaps(s.tx, s.answers.map(a => a.key))}
-        onContinue={extract} onVoiceUsed={translated => markUsed({ tts: true, translate: translated })} />
+        onContinue={extract} onVoiceUsed={translated => markUsed({ tts: true, translate: translated })} keyterms={keytermsFor(s)} />
     </>}
 
     {s.phase === "extract" && <>

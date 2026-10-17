@@ -1,3 +1,4 @@
+import { vagueTerms } from "./verify.js";
 // Mirrors backend/services/compiler.py: only approved rules and verified content reach the document.
 import { DOCUMENT_TYPES } from "./mock.js";
 import { getBespokeAppHtml } from "./microapps.js";
@@ -56,6 +57,7 @@ export function compileDocument({ rules, mode, metadata = {}, domain = "", demo 
   const ids = new Set(rules.map(r => r.id));
   const answered = new Set(answers.map(a => a.key)), covered = new Set(coverage.filter(c => c.status === "covered").map(c => c.key));
   const openQuestions = coverage.length || answers.length ? CHECKLIST.filter(c => !answered.has(c.key) && !covered.has(c.key)).map(c => `${c.label}: ${c.question}`) : [];
+  for (const r of rules) for (const v of vagueTerms([r.title, r.condition, r.action, r.exception].map(x => x || "").join(" "))) openQuestions.push(`Clarify "${v.term}" in ${r.title}: ${v.question}`);
   for (const c of conflicts) if (c.rule_ids.every(id => ids.has(id))) openQuestions.push("Conflict to resolve: " + c.explanation);
   if (metadata.review_notes) openQuestions.push(metadata.review_notes);
   return {
