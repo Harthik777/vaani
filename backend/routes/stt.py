@@ -32,6 +32,8 @@ async def stt(audio: UploadFile | None = File(None), lang: Language = Form("hind
             raise ValueError("Empty transcript")
         return {**result, "demo": False, "model": config.SARVAM_STT_MODEL, "mode": config.SARVAM_STT_MODE if sarvam.stt_is_v4() else "transcribe"}
     except Exception as exc:
+        if isinstance(exc, sarvam.SarvamError):
+            raise HTTPException(exc.status, str(exc) + ' Your audio is preserved.') from exc
         raise HTTPException(502, "Transcription failed. Your audio is preserved. Retry or type the transcript.") from exc
 
 
@@ -55,6 +57,8 @@ async def stt_meeting(audio: UploadFile = File(...), lang: Language = Form("hind
     try:
         result = await sarvam.transcribe_meeting(data, lang, audio.filename, num_speakers, terms)
     except Exception as exc:
+        if isinstance(exc, sarvam.SarvamError):
+            raise HTTPException(exc.status, str(exc) + ' Your audio is preserved.') from exc
         raise HTTPException(502, "Sarvam could not transcribe the recording. Try a shorter clip, or type the transcript.") from exc
     if not result["entries"]:
         raise HTTPException(502, "Sarvam returned no speech for this recording.")

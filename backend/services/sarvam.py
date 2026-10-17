@@ -43,6 +43,31 @@ def enabled() -> bool:
     return bool(config.USE_REAL_SARVAM and config.SARVAM_API_KEY)
 
 
+class SarvamError(Exception):
+    """A Sarvam failure with a message the user can act on, and the HTTP status the API should return."""
+    def __init__(self, message, status=502):
+        super().__init__(message)
+        self.status = status
+
+
+def _check(r):
+    """Turn Sarvam's documented error responses (error.code / error.message) into actionable messages.
+    Seen live on 17 Oct: 402 insufficient_quota_error (credits used up) and 403 invalid_api_key_error (revoked key)."""
+    if r.status_code < 400:
+        return
+    try:
+        code = (r.json().get("error") or {}).get("code", "")
+    except ValueError:
+        code = ""
+    if r.status_code == 402 or code == "insufficient_quota_error":
+        raise SarvamError("Sarvam credits are used up (insufficient_quota). Top up at dashboard.sarvam.ai, then retry.", 402)
+    if r.status_code == 403 or code == "invalid_api_key_error":
+        raise SarvamError("Sarvam rejected the API key (invalid_api_key). Put a current key from dashboard.sarvam.ai in backend/.env and restart the backend.", 403)
+    if r.status_code == 429:
+        raise SarvamError("Sarvam rate limit reached. Retry in a few seconds.", 429)
+    _check(r)
+
+
 def _headers():
     return {"api-subscription-key": config.SARVAM_API_KEY}
 
@@ -81,7 +106,7 @@ async def transcribe(audio_bytes, lang, filename="recording.webm", content_type=
     async with httpx.AsyncClient(timeout=60) as client:
         r = await client.post(f"{SARVAM_BASE}/speech-to-text", headers=_headers(),
             files={"file": (filename, audio_bytes, content_type)}, data=data)
-        r.raise_for_status()
+        _check(r)
         return r.json()
 
 
@@ -121,116 +146,28 @@ def _sentences(text):
     return [s for s in out if s]
 
 
-async def synthesize(text, lang, dict_id=None):
+async def synthesize(text, lang):
     """Returns base64 WAV clips, one per <=2500-char piece, in order. Clips are cached on disk, so a
-    rehearsal makes the same sentence instant on stage. dict_id: optional Bulbul pronunciation dictionary."""
+    rehearsal makes the same sentence instant on stage."""
     clips = []
     speaker = speaker_for(lang)
     async with httpx.AsyncClient(timeout=60) as client:
         for piece in split_text(text, TTS_LIMIT):
-            key = cache.key(config.SARVAM_TTS_MODEL, speaker, LANG_CODES[lang], piece, dict_id or "")
+            key = cache.key(config.SARVAM_TTS_MODEL, speaker, LANG_CODES[lang], piece)
             hit = cache.get("tts", key)
             if hit:
                 clips.extend(hit)
                 continue
             r = await client.post(f"{SARVAM_BASE}/text-to-speech", headers=_headers(),
-                json={"text": piece, "language_code": LANG_CODES[lang], "model": config.SARVAM_TTS_MODEL, "speaker": speaker, **({"dict_id": dict_id} if dict_id else {})})
-            r.raise_for_status()
+                json={"text": piece, "language_code": LANG_CODES[lang], "model": config.SARVAM_TTS_MODEL, "speaker": speaker})
+            _check(r)
             audios = r.json()["audios"]
             cache.put("tts", key, audios)
             clips.extend(audios)
     return clips
 
 
-MAYURA_LANGS = {"hindi", "marathi", "tamil", "telugu", "bengali", "kannada", "english"}
-_dicts: dict[str, str] = {}
-
-
-async def text_lid(text):
-    """Sarvam text language identification: {language_code, script_code} (script Latn means Roman-script input)."""
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(f"{SARVAM_BASE}/text-lid", headers=_headers(), json={"input": (text or "")[:1000]})
-        r.raise_for_status()
-        return r.json()
-
-
-async def transliterate(text, target, source="english"):
-    """Roman-script Hindi/Kannada ("delivery 2 ghante me") -> native script, line by line, numerals kept as digits.
-    Lines that are already in native script are left untouched."""
-    out = []
-    async with httpx.AsyncClient(timeout=60) as client:
-        for line in (text or "").split("\n"):
-            body = line
-            prefix = ""
-            m = re.match(r"^(\[[^\]]{1,60}\]\s*)(.*)$", line)
-            if m:
-                prefix, body = m.group(1), m.group(2)
-            if not body.strip() or not re.search(r"[A-Za-z]", body) or re.search(r"[ऀ-෿]", body):
-                out.append(line)
-                continue
-            r = await client.post(f"{SARVAM_BASE}/transliterate", headers=_headers(),
-                json={"input": body[:1000], "source_language_code": LANG_CODES[source], "target_language_code": LANG_CODES[target],
-                      "numerals_format": "international", "spoken_form": False})
-            r.raise_for_status()
-            out.append(prefix + r.json().get("transliterated_text", body))
-    return "\n".join(out)
-
-
-async def translate_colloquial(text, target, source="english", mode="code-mixed"):
-    """Owner-facing register (mayura:v1 supports modes; 11 languages, 1000 chars). Falls back to formal translate."""
-    if not text.strip() or target == source or target not in MAYURA_LANGS:
-        return await translate(text, target, source)
-    out = []
-    async with httpx.AsyncClient(timeout=60) as client:
-        for piece in split_text(text, 1000):
-            r = await client.post(f"{SARVAM_BASE}/translate", headers=_headers(),
-                json={"input": piece, "source_language_code": LANG_CODES[source], "target_language_code": LANG_CODES[target],
-                      "model": "mayura:v1", "mode": mode, "numerals_format": "international"})
-            if r.status_code >= 400:
-                return await translate(text, target, source)
-            out.append(r.json()["translated_text"])
-    return " ".join(out)
-
-
-def acronym_pronunciations(terms):
-    """'HDFC' -> 'H D F C', 'UPI' -> 'U P I': the read-back spells acronyms instead of guessing a word."""
-    out = {}
-    for t in terms or []:
-        t = str(t).strip()
-        if 2 <= len(t) <= 6 and t.isupper() and t.isalpha():
-            out[t] = " ".join(t)
-    return out
-
-
-async def pronunciation_dict(lang, terms):
-    """Create (once per session) a Bulbul pronunciation dictionary for the session's acronyms. Returns dict_id or None.
-    POST /text-to-speech/pronunciation-dictionary, multipart JSON file; limits 100 words, 10 dicts per user."""
-    pron = acronym_pronunciations(terms)
-    if not pron or not enabled():
-        return None
-    key = cache.key(lang, json.dumps(pron, sort_keys=True))
-    if key in _dicts:
-        return _dicts[key]
-    hit = cache.get("prondict", key)
-    if hit:
-        _dicts[key] = hit
-        return hit
-    payload = json.dumps({"pronunciations": {LANG_CODES[lang]: pron}}).encode("utf-8")
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(f"{SARVAM_BASE}/text-to-speech/pronunciation-dictionary", headers=_headers(),
-                                  files={"file": ("dict.json", payload, "application/json")})
-            r.raise_for_status()
-            dict_id = r.json().get("dictionary_id") or r.json().get("dict_id")
-    except Exception:
-        return None
-    if dict_id:
-        _dicts[key] = dict_id
-        cache.put("prondict", key, dict_id)
-    return dict_id
-
-
-async def translate(text, target, source="english"):
+async def translate(text, target, source="english", client=None):
     """English -> Indian language with sarvam-translate:v1. Results are cached in memory and on disk."""
     if not text.strip() or target == source:
         return text
@@ -241,14 +178,20 @@ async def translate(text, target, source="english"):
     if hit:
         _translations[key] = hit
         return hit
+    if client is None:
+        async with httpx.AsyncClient(timeout=30) as own:
+            return await translate(text, target, source, own)
     out = []
-    async with httpx.AsyncClient(timeout=60) as client:
-        for piece in split_text(text, TRANSLATE_LIMIT):
+    for piece in split_text(text, TRANSLATE_LIMIT):
+        for attempt in range(3):  # Sarvam rate limits (429) are retried with a short backoff
             r = await client.post(f"{SARVAM_BASE}/translate", headers=_headers(),
                 json={"input": piece, "source_language_code": LANG_CODES[source], "target_language_code": LANG_CODES[target],
                       "model": config.SARVAM_TRANSLATE_MODEL, "mode": "formal"})
-            r.raise_for_status()
-            out.append(r.json()["translated_text"])
+            if r.status_code != 429 or attempt == 2:
+                break
+            await asyncio.sleep(0.6 * (attempt + 1))
+        _check(r)
+        out.append(r.json()["translated_text"])
     result = " ".join(out)
     _translations[key] = result
     cache.put("translate", key, result)
@@ -409,3 +352,16 @@ def parse_digitise_zip(data: bytes) -> dict:
 async def digitise_notes(file_bytes, filename, content_type, lang):
     language_code = LANG_CODES.get(lang, "en-IN") if lang else "en-IN"
     return await asyncio.to_thread(_digitise_job, file_bytes, filename or "notes.png", content_type or "image/png", language_code)
+
+
+async def translate_many(texts, target, concurrency=None):
+    """Translate many lines at once on ONE shared connection pool. A new connection per line (TLS handshake each time)
+    made 26 lines take ~12 s; shared, 10 lines in parallel take ~0.9 s (measured 17 Oct). Returns {original: translated}."""
+    unique = [t for t in dict.fromkeys(texts) if t and t.strip()]
+    limit = concurrency or config.TRANSLATE_CONCURRENCY
+    gate = asyncio.Semaphore(limit)  # created per call: safe across event loops
+    async with httpx.AsyncClient(timeout=30, limits=httpx.Limits(max_connections=limit)) as client:
+        async def one(text):
+            async with gate:
+                return text, await translate(text, target, client=client)
+        return dict(await asyncio.gather(*(one(t) for t in unique)))

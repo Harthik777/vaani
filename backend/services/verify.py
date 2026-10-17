@@ -76,39 +76,6 @@ def numbers(text):
             out.extend(_canonical(part) for part in raw.split(",") if part)
     return out + word_numbers(text)
 
-# Vague words a business analyst would not let into a BRD. Checked on the rule's own text (title, condition,
-# action, exception), never on the speaker's quote, so a verbatim quote is never "wrong" for being colloquial.
-VAGUE_QUESTIONS = {
-    "time": "How soon exactly? Give a number of hours or days.",
-    "quality": "What does that mean in practice? Name one measurable outcome.",
-    "quantity": "How many, exactly? Give a number or a range.",
-    "money": "What price or budget range, in rupees?",
-    "ease": "For whom, and how many steps or minutes should it take?",
-    "frequency": "How often exactly? Give a schedule.",
-}
-VAGUE_TERMS = {
-    "time": ["fast", "quickly", "quick", "soon", "asap", "immediately", "timely", "promptly", "jaldi", "jald", "turant", "जल्दी", "जल्द", "तुरंत", "ಬೇಗ", "ಬೇಗನೆ", "bega", "begane"],
-    "quality": ["good", "better", "best", "nice", "proper", "robust", "modern", "efficient", "high quality", "good quality", "achha", "accha", "acha", "अच्छा", "अच्छी", "अच्छे", "ठीक-ठाक", "बढ़िया", "ಚೆನ್ನಾಗಿ", "ಚೆನ್ನಾದ", "chennagi"],
-    "quantity": ["many", "few", "some", "several", "large", "small", "big", "huge", "lots of", "a lot", "etc", "and so on", "bahut", "thoda", "kuch", "बहुत", "थोड़ा", "कुछ", "वगैरह", "ಸ್ವಲ್ಪ", "ತುಂಬಾ", "swalpa", "tumba"],
-    "money": ["cheap", "affordable", "reasonable price", "low cost", "sasta", "सस्ता", "सस्ते", "ಅಗ್ಗ", "agga"],
-    "ease": ["easy", "simple", "user-friendly", "user friendly", "easy to use", "aasan", "आसान", "ಸುಲಭ", "sulabha"],
-    "frequency": ["regularly", "often", "sometimes", "frequently", "occasionally", "periodically", "aksar", "अक्सर", "कभी-कभी"],
-}
-
-
-def vague_terms(text):
-    """[{term, kind, question}] for each vague word found in the rule's own wording. Whole-word, case-insensitive."""
-    low = " " + re.sub(r"[\s,.;:()\[\]\"'!?।]+", " ", (text or "").lower()) + " "
-    found, seen = [], set()
-    for kind, terms in VAGUE_TERMS.items():
-        for term in terms:
-            if term in seen:
-                continue
-            if f" {term.lower()} " in low:
-                seen.add(term)
-                found.append({"term": term, "kind": kind, "question": VAGUE_QUESTIONS[kind]})
-    return found
-
 
 def check_numbers(text, quote, spoken=None):
     quote_numbers = set(numbers(quote))
@@ -145,8 +112,6 @@ def summarize(quote_status, number_checks):
 
 
 def verify_rule(rule, transcript):
-    text_fields = " ".join(str(rule.get(k) or "") for k in ("title", "condition", "action", "exception"))
-    vague = vague_terms(text_fields)
     quote = (rule.get("source_quote") or "").strip()
     if not quote:
         quote_status = "missing"
@@ -156,7 +121,7 @@ def verify_rule(rule, transcript):
         quote_status = "untraceable"
     text = " ".join(str(rule.get(k) or "") for k in ("title", "condition", "action", "exception"))
     checks = check_numbers(text, quote, rule.get("numbers")) if quote_status == "verified" else []
-    return {"quote": quote_status, "numbers": checks, "status": summarize(quote_status, checks), "vague": vague}
+    return {"quote": quote_status, "numbers": checks, "status": summarize(quote_status, checks)}
 
 
 _PLACEHOLDER = re.compile(r"(?i)\W*(ai suggestion|please confirm|to be confirmed|n/?a|none|tbd|\.\.\.)[\W\s,]*(please confirm)?\W*")

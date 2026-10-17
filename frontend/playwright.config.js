@@ -3,7 +3,7 @@ import { defineConfig } from "@playwright/test";
 //   PW_WEB_PORT=5174 PW_API_PORT=8001 npx playwright test
 const WEB = process.env.PW_WEB_PORT || "5173", API = process.env.PW_API_PORT || "8000";
 // Portable paths: PW_AUDIT_DIR (screenshots, PDFs, results), PW_PYTHON (interpreter with backend deps), VAANI_DATA_DIR.
-const AUDIT = process.env.PW_AUDIT_DIR || "../../../audit";
+const AUDIT = process.env.PW_AUDIT_DIR || "test-output";  // screenshots, PDFs and results stay inside the project (git-ignored)
 const PYTHON = process.env.PW_PYTHON || "python";
 const DATA = process.env.VAANI_DATA_DIR || "./data/test-data";
 export default defineConfig({

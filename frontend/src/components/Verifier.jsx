@@ -11,7 +11,6 @@ export function VerifyBadge({ check }) {
       <span key={n.value} className={"num num-" + n.status} title={n.status === "interpreted" ? "The AI read this number from the spoken words. Please confirm." : n.status === "unsupported" ? "Nobody said this number." : "This number appears in the speech."}>
         {NUMBER_ICON[n.status]} {n.value}{n.status === "interpreted" ? <> ← <q>{n.spoken}</q></> : n.status === "unsupported" ? " (not spoken)" : ""}
       </span>)}</span>}
-    {!!check.vague?.length && <span className="num-chips">{check.vague.map(v => <span key={v.term} className="num num-vague" title={v.question}>🔎 “{v.term}” · {v.question}</span>)}</span>}
     {check.quote_note && <span className="quote-note">🔧 {check.quote_note}</span>}
   </div>;
 }
@@ -25,7 +24,6 @@ export function VerifierSummary({ rules, checks, rejected = [], brain }) {
       <span className="vc vc-warn">🔶 {count("needs_confirmation")} numbers to confirm</span>
       <span className="vc vc-bad">⛔ {count("unsupported_number") + count("rejected")} problem{count("unsupported_number") + count("rejected") === 1 ? "" : "s"}</span>
       <span className="vc vc-bad">🚫 {rejected.length} AI claim{rejected.length === 1 ? "" : "s"} blocked</span>
-      <span className="vc vc-warn">🔎 {checks.reduce((n, c) => n + (c.vague?.length || 0), 0)} vague term{checks.reduce((n, c) => n + (c.vague?.length || 0), 0) === 1 ? "" : "s"} to clarify</span>
     </div>
     {!!rejected.length && <ul className="rejected-list">{rejected.map((r, i) => <li key={i}><s>{r.title ? r.title + ": " : ""}{r.text}</s> <span className="reason">{r.reason}{r.source_quote ? ` · claimed quote: “${r.source_quote}”` : ""}</span></li>)}</ul>}
     {!rules.length && <p>No requirements yet.</p>}

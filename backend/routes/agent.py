@@ -22,13 +22,18 @@ class ConflictsIn(BaseModel):
 async def gaps(body: GapsIn):
     try:
         return await agent.assess(body.transcript, body.mode, body.lang, body.answered, body.demo)
-    except Exception:
-        # The AI check failed: fall back to asking every unanswered checklist question, and say so.
+    except Exception as exc:
+        # The AI check failed: fall back to asking every unanswered checklist question, say so, and log why.
+        print(f"[agent] coverage check failed, asking the full checklist: {type(exc).__name__}: {exc}")
         items = [{"key": c["key"], "label": c["label"], "status": "answered" if c["key"] in body.answered else "missing", "source_quote": None} for c in agent.CHECKLIST]
         questions = [{"key": c["key"], "label": c["label"], "question": c["question"], "question_local": None} for c in agent.CHECKLIST if c["key"] not in body.answered]
+        questions, translated = await agent.localize(questions, body.lang)  # the speaker still gets questions in their language
         done = sum(1 for i in items if i["status"] == "answered")
-        return {"items": items, "questions": questions, "completeness": int(100 * done / len(items) + 0.5), "brain": "checklist only (AI check failed)",
-                "translated_with_sarvam": False, "ai_checked": False, "sample_answers": {}, "warning": "The AI coverage check failed, so every open checklist question is asked."}
+        reason = "the AI service is busy (rate limit)" if "429" in str(exc) or "503" in str(exc) else "the AI service did not answer"
+        return {"items": items, "questions": [{k: v for k, v in q.items() if k != "translation_error"} for q in questions],
+                "completeness": int(100 * done / len(items) + 0.5), "brain": "checklist only (AI check failed)",
+                "translated_with_sarvam": translated, "ai_checked": False, "sample_answers": {},
+                "warning": f"The AI coverage check failed because {reason}, so every open checklist question is asked. Retry to check again."}
 
 
 @router.post("/api/agent/conflicts")

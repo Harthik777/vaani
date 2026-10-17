@@ -1,4 +1,3 @@
-from services import verify
 """Only submitted rules reach documents and ScreenSpecs. Mirrors frontend/src/data/compiler.js."""
 from models import DOCUMENT_TYPES
 from services import microapps, verify
@@ -98,9 +97,6 @@ def document(body):
     covered = {c.get("key") for c in body.coverage if c.get("covered") or c.get("status") == "covered"}
     open_questions = [f'{c["label"]}: {c["question"]}' for c in CHECKLIST if c["key"] not in answered | covered] if body.coverage or body.answers else []
     ids = {r["id"] for r in rules}
-    for r in body.rules:
-        for v in verify.vague_terms(" ".join(str(getattr(r, k, "") or "") for k in ("title", "condition", "action", "exception"))):
-            open_questions.append(f'Clarify "{v["term"]}" in {r.title}: {v["question"]}')
     open_questions += [f'Conflict to resolve: {c.get("explanation", "")}' for c in body.conflicts
                        if c.get("explanation") and set(c.get("rule_ids") or []) <= ids]
     if body.metadata.get("review_notes"):

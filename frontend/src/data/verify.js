@@ -62,34 +62,6 @@ export function checkNumbers(text, quote, spoken = []) {
   return result;
 }
 
-
-// Vague words a business analyst would not let into a BRD (mirrors backend/services/verify.py).
-export const VAGUE_QUESTIONS = {
-  time: "How soon exactly? Give a number of hours or days.",
-  quality: "What does that mean in practice? Name one measurable outcome.",
-  quantity: "How many, exactly? Give a number or a range.",
-  money: "What price or budget range, in rupees?",
-  ease: "For whom, and how many steps or minutes should it take?",
-  frequency: "How often exactly? Give a schedule.",
-};
-export const VAGUE_TERMS = {
-  time: ["fast", "quickly", "quick", "soon", "asap", "immediately", "timely", "promptly", "jaldi", "jald", "turant", "जल्दी", "जल्द", "तुरंत", "ಬೇಗ", "ಬೇಗನೆ", "bega", "begane"],
-  quality: ["good", "better", "best", "nice", "proper", "robust", "modern", "efficient", "high quality", "good quality", "achha", "accha", "acha", "अच्छा", "अच्छी", "अच्छे", "ठीक-ठाक", "बढ़िया", "ಚೆನ್ನಾಗಿ", "ಚೆನ್ನಾದ", "chennagi"],
-  quantity: ["many", "few", "some", "several", "large", "small", "big", "huge", "lots of", "a lot", "etc", "and so on", "bahut", "thoda", "kuch", "बहुत", "थोड़ा", "कुछ", "वगैरह", "ಸ್ವಲ್ಪ", "ತುಂಬಾ", "swalpa", "tumba"],
-  money: ["cheap", "affordable", "reasonable price", "low cost", "sasta", "सस्ता", "सस्ते", "ಅಗ್ಗ", "agga"],
-  ease: ["easy", "simple", "user-friendly", "user friendly", "easy to use", "aasan", "आसान", "ಸುಲಭ", "sulabha"],
-  frequency: ["regularly", "often", "sometimes", "frequently", "occasionally", "periodically", "aksar", "अक्सर", "कभी-कभी"],
-};
-export function vagueTerms(text) {
-  const low = " " + (text || "").toLowerCase().replace(/[\s,.;:()\[\]"'!?।]+/g, " ") + " ";
-  const found = [], seen = new Set();
-  for (const [kind, terms] of Object.entries(VAGUE_TERMS)) for (const term of terms) {
-    if (seen.has(term)) continue;
-    if (low.includes(" " + term.toLowerCase() + " ")) { seen.add(term); found.push({ term, kind, question: VAGUE_QUESTIONS[kind] }); }
-  }
-  return found;
-}
-
 export function verifyRule(rule, transcript) {
   const quote = (rule.source_quote || "").trim();
   const quoteStatus = !quote ? "missing" : (transcript || "").includes(quote) ? "verified" : "untraceable";
@@ -97,8 +69,7 @@ export function verifyRule(rule, transcript) {
   const nums = quoteStatus === "verified" ? checkNumbers(text, quote, rule.numbers) : [];
   const status = quoteStatus !== "verified" ? "rejected" : nums.some(n => n.status === "unsupported") ? "unsupported_number"
     : nums.some(n => n.status === "interpreted") ? "needs_confirmation" : "verified";
-  const vague = vagueTerms(text);
-  return { quote: quoteStatus, numbers: nums, status, vague };
+  return { quote: quoteStatus, numbers: nums, status };
 }
 
 export const STATUS_LABEL = {

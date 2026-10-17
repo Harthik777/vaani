@@ -28,10 +28,10 @@ Then voice sign-off, then the BRD and app. Say "voice-first BRD" last, not first
 
 1. *Next: agent checks for gaps.* "It found the goal, features and constraints, with the exact words. It is missing users, timeline, budget, success measure and sign-off." Let it **ask aloud** (Sarvam Translate + Bulbul). Record or *Use sample answer*, save. "The meter climbs."
 2. *Extract requirements.* **"Watch this:"** "The owner said 50 kg; the manager said 100 kg. Vaani caught the contradiction, with both voices." Keep the manager's version.
-3. **The verifier, live.** Type `48` into a rule: "⛔ 48 (not spoken). The AI can't sneak a number in, and neither can we." Undo it. Point at a 🔎 chip: "And it won't let 'jaldi' into a contract either; it asks how many hours."
+3. **The verifier, live.** Type `48` into a rule: "⛔ 48 (not spoken). The AI can't sneak a number in, and neither can we." Undo it.
 4. **Approve by voice.** Play the original clip, let Bulbul read the rule back in the owner's language, then press *Say haan or nahi to decide* and say "हाँ" (or "ಹೌದು"). The requirement is approved with the spoken word recorded against it; the BRD shows "by voice (हाँ)". Do this once; use the buttons for the rest.
 5. **BRD + App:** "12 sections, FR-IDs, acceptance criteria, open questions." Show the **verification report**: "Anything the AI wrote that nobody said is blocked here." Switch BRD + app to हिंदी / ಕನ್ನಡ in one click. *Listen to BRD summary*. **⬇ Download**: Word (bilingual), **Jira CSV** ("the vendor gets tickets"). Click around the generated app, or the requirement simulator (move the slider below 100 kg, the alert fires).
-6. *Publish* → two **QR codes** appear: "Scan this and the BRD with the voice clips opens on your phone." Hand the laptop to a judge for the scan, or tap the **WhatsApp** link to forward it.
+6. *Publish* → **WhatsApp** button: "The owner gets the portal link on WhatsApp."
 
 **[3:40–4:30] Why it is different (one slide).**
 "ChatPRD, Jira Rovo and Notion take typed English from product managers and never verify. Lovable and Bolt take typed English prompts. Paytm Soundbox and Khatabook answer questions; they don't build software. Nobody interviews, verifies spoken numbers, or detects two stakeholders disagreeing." Do not name other teams in the room.
@@ -45,8 +45,6 @@ Then voice sign-off, then the BRD and app. Say "voice-first BRD" last, not first
 **[5:10–5:45] Numbers (one slide).** Verifier: 66/66 planted errors caught, 0 false blocks (3 languages). Conflict detector: 7/7 found, 0 false alarms, 0.5 s each on Sarvam 105B. Diarized meeting: 30 s two-voice file separated correctly in 7 s. 64 backend tests, 12 browser flows. A full session costs under ₹5 in Sarvam credits. **Who pays:** IT services firms and freelancers building for MSMEs: fewer rework cycles, requirements the client cannot dispute.
 
 **[5:45–6:00] Close.** "Owners speak. Vendors build. Nothing gets lost in between. **Vaani: your words, verified.**"
-
-**If a judge asks "how would a shop owner know what to do?":** press **? Help** on any step; it answers in the owner's language on Sarvam 105B, and offline from the built-in guide.
 
 ## Live-demo safety
 - **Rehearse the exact demo once before the pitch with the backend running.** LLM drafts, Bulbul audio and translations are cached on disk (`backend/data/cache`), so the identical stage run is instant. Only live microphone speech is truly live.

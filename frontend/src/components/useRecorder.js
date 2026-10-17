@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client.js";
 import { audioStore } from "../api/storage.js";
 
-// Each segment (10 s: words appear sooner, still under Sarvam's 30 s sync limit) has its own container header; arbitrary MediaRecorder chunks
+// Each 25s segment has its own container header; arbitrary MediaRecorder chunks
 // are not sent as if they were independently decodable audio files.
 export default function useRecorder({ lang, mode, keyterms = [], onEvidence, onTranscript, onError }) {
   const [recording, setRecording] = useState(false);
@@ -46,7 +46,7 @@ export default function useRecorder({ lang, mode, keyterms = [], onEvidence, onT
       else { stream.current?.getTracks().forEach(t => t.stop()); stream.current = null; }
     };
     r.start();
-    timer.current = setTimeout(() => { if (r.state === "recording") r.stop(); }, 10000);
+    timer.current = setTimeout(() => { if (r.state === "recording") r.stop(); }, 25000);
   };
   const start = async () => {
     if (running.current || recording) return;

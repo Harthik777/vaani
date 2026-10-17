@@ -4,7 +4,7 @@ import { verifyRule } from "../data/verify.js";
 export const BASE = import.meta.env?.VITE_API_BASE || "http://localhost:8000";
 const OFFLINE = "Backend unavailable. Start the API to use recording transcription, publishing or tickets.";
 
-async function request(path, { body, key, method = "GET", binary = false, timeout = 65000 } = {}) {
+async function request(path, { body, key, method = "GET", binary = false, timeout = 45000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
@@ -58,11 +58,11 @@ export const api = {
     }
   },
   async gaps(body) {
-    try { return await post("/api/agent/gaps", body, { timeout: 90000 }); }
+    try { return await post("/api/agent/gaps", body, { timeout: 30000 }); }
     catch (e) { if (e.offline) return localDemoGaps(body.transcript, body.answered); throw e; }
   },
   async conflicts(body) {
-    try { return await post("/api/agent/conflicts", body, { timeout: 90000 }); }
+    try { return await post("/api/agent/conflicts", body, { timeout: 30000 }); }
     catch (e) {
       if (e.offline && body.demo && meetingLanguage(body.transcript)) {
         const ids = new Set(body.rules.map(r => r.id));
@@ -71,11 +71,11 @@ export const api = {
       throw e;
     }
   },
-  draftBrd: body => post("/api/brd/draft", body, { timeout: 150000 }),
-  generateApp: body => post("/api/app/generate", body, { timeout: 150000 }),
+  draftBrd: body => post("/api/brd/draft", body, { timeout: 60000 }),
+  generateApp: body => post("/api/app/generate", body, { timeout: 60000 }),
   docx: body => request("/api/brd/docx", { method: "POST", body, binary: true }),
-  tts: body => post("/api/tts", body, { timeout: 60000 }),
-  translate: body => post("/api/translate", body, { timeout: 120000 }),
+  tts: body => post("/api/tts", body, { timeout: 30000 }),
+  translate: body => post("/api/translate", body, { timeout: 30000 }),
   async transcribe(blob, lang, mode, keyterms = []) {
     const body = new FormData();
     body.append("audio", blob, blob.type.includes("mp4") ? "recording.mp4" : "recording.webm");
@@ -108,19 +108,6 @@ export const api = {
       : request("/api/evidence/" + evidence.id, { key: evidence.key, binary: true });
   },
   publish: (body, key) => post("/api/portals", body, { key }),
-  transliterate: body => post("/api/transliterate", body, { timeout: 60000 }),
-  async help(body) {
-    try { return await post("/api/help", body, { timeout: 40000 }); }
-    catch (e) {
-      if (!e.offline) throw e;
-      // No backend: a short orientation per step so the guide still works in the offline demo.
-      const steps = { landing: "Pick your language, then press Start capturing.", record: "Tap the microphone and describe what you need, or use the demo. Then press Next.",
-        interview: "Answer what the agent asks, or Skip. Then Extract requirements.", extract: "Check each card; red numbers were never said. Then Review and approve.",
-        signoff: "Approve or skip each requirement.", brd: "Download, switch language, publish for a QR code." };
-      return { answer: steps[body.phase] || steps.landing, brain: "guide (offline)", suggestions: [] };
-    }
-  },
-  qrUrl: (data, size = 6) => BASE + "/api/qr.png?size=" + size + "&data=" + encodeURIComponent(data),
   portal: (id, key) => request("/api/portals/" + id, { key }),
   ticket: body => post("/api/tickets", body),
   upiLink: body => post("/api/upi/link", body),

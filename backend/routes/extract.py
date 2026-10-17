@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from models import Mode, Rule
 import mocks
 from services import llm, verify
-from services.agent import meeting_language
+from services.agent import meeting_language, speaker_of, validate_conflicts
 
 router = APIRouter()
 log = logging.getLogger("vaani.extract")
@@ -55,14 +55,17 @@ async def extract(body: ExtractIn):
         rules = result["rules"]
         for r in rules:
             r["verification"] = verify.verify_rule(r, body.transcript)
-        return {"rules": rules, "review_notes": result.get("review_notes", []), "rejected": [], "demo": True, "brain": "demo fixture"}
+        meeting = meeting_language(body.transcript) and body.mode == "business"
+        return {"rules": rules, "review_notes": result.get("review_notes", []), "rejected": [], "demo": True, "brain": "demo fixture",
+                "conflicts": validate_conflicts(mocks.MEETING["conflicts"], rules) if meeting else []}
     if not llm.live():
         raise HTTPException(503, "Live extraction is not configured. Enter rules manually or choose Use demo.")
     result, last = None, None
     for attempt in range(2):  # one retry: provider hiccups should not end a live demo
         try:
-            result = await llm.complete_json(llm.extraction_prompt(body.mode, body.transcript, body.domain))
-            if isinstance(result.get("rules"), list) and result["rules"]:
+            result = await llm.complete_json(llm.extraction_prompt(body.mode, body.transcript, body.domain), fast=True)
+            # An empty list is a valid answer (e.g. a personal chat with no requirement); only a missing list is malformed.
+            if isinstance(result.get("rules"), list):
                 break
             log.warning("extraction attempt %d: model JSON had no rules list (keys: %s)", attempt + 1, list(result)[:8])
             last, result = ValueError("Model returned no rules"), None
@@ -94,6 +97,11 @@ async def extract(body: ExtractIn):
         if grounded["_repaired_from"]:
             check["quote_note"] = f'Quote corrected to the exact words spoken (the AI copied: "{grounded["_repaired_from"][:200]}")'
         r["verification"] = check
+        r["speaker"] = r.get("speaker") or speaker_of(r["source_quote"], body.transcript)
         kept.append(r)
     notes = result.get("review_notes", [])
-    return {"rules": kept, "review_notes": notes if isinstance(notes, list) else [], "rejected": rejected, "demo": False, "brain": llm.main_brain()}
+    notes = notes if isinstance(notes, list) else []
+    if not kept and not rejected and not notes:
+        notes = ["No business or software requirement was found in what was said. Describe what you need, or enter rules manually."]
+    return {"rules": kept, "review_notes": notes, "rejected": rejected, "demo": False,
+            "conflicts": validate_conflicts(result.get("conflicts"), kept), "brain": llm.main_brain(fast=True)}

@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
-const AUDIT = process.env.PW_AUDIT_DIR || "../../../audit";
+const AUDIT = process.env.PW_AUDIT_DIR || "test-output";
 
 // The test backend runs with USE_REAL_LLM=false and USE_REAL_SARVAM=false: every AI/Sarvam path must degrade honestly.
 const MODES = { business: "Business requirements (BRD)", awareness: "Public awareness", audit: "Field audit", deals: "B2B deals" };
@@ -18,12 +18,6 @@ async function toReview(page) {
   await expect(page.getByRole("button", { name: "Extract requirements →" })).toBeEnabled();
   await page.getByRole("button", { name: "Extract requirements →" }).click();
   await expect(page.getByRole("button", { name: "Review and approve" })).toBeEnabled();
-  await vendorView(page);
-}
-// The Review step opens in the owner's read-only view; edits in these tests need the vendor view.
-async function vendorView(page) {
-  const toggle = page.getByRole("button", { name: /Vendor view/ });
-  if (await toggle.count()) await toggle.click();
 }
 async function draft(page, mode = "business") {
   await start(page, mode);
@@ -112,8 +106,6 @@ test("Meeting demo: agent interview, conflict, verifier, full BRD and exports", 
   await page.screenshot({ path: AUDIT + "/meeting-2-review.png", fullPage: true });
   await conflict.getByRole("button", { name: "Keep Manager's version" }).click();
   await expect(page.locator(".conflict-card")).toHaveCount(0);
-  await expect(page.locator(".owner-card")).toHaveCount(4);
-  await vendorView(page);
   await expect(page.locator(".rule-editor")).toHaveCount(4);
 
   // A user edit that introduces an unspoken number is caught immediately.
@@ -170,7 +162,7 @@ test("Hindi meeting demo keeps Hindi quotes and finds the conflict", async ({ pa
 });
 
 test("Deaf/HoH typed flow, back navigation, all skipped, and mode reset", async ({ page }) => {
-  await page.goto("/"); await page.getByText("More options", { exact: false }).click(); await page.getByRole("button", { name: /Deaf \/ HoH/ }).click();
+  await page.goto("/"); await page.getByRole("button", { name: /Deaf \/ HoH/ }).click();
   await page.getByRole("button", { name: "Start capturing" }).click();
   await expect(page.getByRole("button", { name: "Record microphone" })).toHaveCount(0);
   await page.getByLabel("Transcript", { exact: true }).fill("When stock is low, place a new order.");
@@ -192,7 +184,6 @@ test("Deaf/HoH typed flow, back navigation, all skipped, and mode reset", async 
 test("Live text cannot silently become demo rules and edits invalidate approval", async ({ page }) => {
   await draft(page); await signoff(page); await approveRemaining(page);
   for (let i = 0; i < 4; i++) await page.getByRole("button", { name: "Back", exact: false }).click();
-  if (!(await page.locator(".tx-edit").evaluate(e => e.open))) await page.getByText("Edit the words", { exact: true }).click();
   await page.getByLabel("Transcript", { exact: true }).fill("These are real custom words.");
   await toReviewExpectingFailure(page);
   await expect(page.locator(".rule-editor")).toHaveCount(0);

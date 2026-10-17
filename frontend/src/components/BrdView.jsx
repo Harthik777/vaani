@@ -1,4 +1,4 @@
-import { cloneElement, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { api, playClips } from "../api/client.js";
 import { toJiraCsv, toMarkdown, download, fileName } from "../data/export.js";
 import PhoneFrame, { openSandboxed } from "./PhoneFrame.jsx";
@@ -56,43 +56,6 @@ export function Document({ brd, evidence = [], portal, translations }) {
   </article>;
 }
 
-// One screen the IT vendor actually receives: every requirement with its acceptance criteria, who said it,
-// whether it was verified, plus the open questions. Prints cleanly and matches the Jira CSV.
-const fmt = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
-function HearClip({ evidence, start, end }) {
-  const [open, setOpen] = useState(false);
-  return <span className="hear-clip"><button className="play" onClick={() => setOpen(o => !o)}>🔊 {fmt(start)}–{fmt(end)}</button>
-    {open && <SourceAudio evidence={evidence} start={start} end={end} caption=" " />}</span>;
-}
-
-export function VendorPack({ brd, translations, evidence = [] }) {
-  const rules = brd.business_rules || [];
-  const verified = rules.filter(r => r.verification?.status === "verified").length;
-  const confirm = rules.filter(r => ["needs_confirmation", "unsupported_number"].includes(r.verification?.status)).length;
-  const criteria = rules.reduce((n, r) => n + (r.acceptance?.length || 0), 0);
-  return <section className="vendor-pack" aria-label="Vendor hand-off">
-    <div className="vendor-head"><div><div className="eyebrow">Vendor hand-off</div><h2>What the IT vendor builds</h2></div>
-      <dl className="vendor-stats">
-        <div><dt>Requirements</dt><dd>{rules.length}</dd></div>
-        <div><dt>Verified against speech</dt><dd>{verified}</dd></div>
-        <div><dt>Numbers to confirm</dt><dd>{confirm}</dd></div>
-        <div><dt>Acceptance criteria</dt><dd>{criteria}</dd></div>
-        <div><dt>Open questions</dt><dd>{brd.open_questions?.length || 0}</dd></div>
-      </dl></div>
-    <div className="tbl"><table className="vendor-table">
-      <thead><tr><th>ID</th><th>Requirement</th><th>Said by</th><th>Acceptance</th><th>Status</th><th>Evidence</th></tr></thead>
-      <tbody>{rules.map(r => <tr key={r.id}>
-        <td className="n"><span className="fr-id">{r.req_id}</span></td>
-        <td><b>{r.title}</b><div className="logic">{r.rule}</div>{translations?.[r.rule] && <span className="tr">{translations[r.rule]}</span>}</td>
-        <td>{r.speaker ? <span className="speaker-chip">{r.speaker}</span> : <span className="source-note">—</span>}</td>
-        <td>{r.acceptance?.length ? <ol className="vendor-ac">{r.acceptance.map((a, i) => <li key={i}>{a}</li>)}</ol> : <span className="source-note">To be written</span>}</td>
-        <td><span className={"vp-status vp-" + (r.verification?.status || "none")}>{r.verification?.status === "verified" ? "Verified" : r.verification?.status === "needs_confirmation" ? "Confirm number" : r.verification?.status === "unsupported_number" ? "Unspoken number" : r.verification?.status === "rejected" ? "Quote mismatch" : "—"}</span></td>
-        <td className="n">{r.start != null && evidence.find(e => e.id === r.evidence_id) ? <HearClip evidence={evidence.find(e => e.id === r.evidence_id)} start={r.start} end={r.end} /> : <span className="source-note">{r.source_quote ? "quote only" : "—"}</span>}</td>
-      </tr>)}</tbody></table></div>
-    {!!brd.open_questions?.length && <div className="vendor-open"><b>Open questions for the client</b><ol>{brd.open_questions.map((q, i) => <li key={i}>{q}</li>)}</ol></div>}
-  </section>;
-}
-
 function summaryText(brd) {
   const items = key => (brd.sections?.[key] || []).map(i => i.text);
   return [brd.project_name + ".", ...items("executive_summary"), ...items("objectives"),
@@ -101,7 +64,7 @@ function summaryText(brd) {
 }
 
 export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, langs, lang, reset, widgets, onWidgets, metadata, share, shareUrl, targetDevice,
-  ai, onRedraft, onRegenerateApp, serverBody, sarvamVoice, onSarvamUsed, completeness, a11y, docLang, translations, onLanguage }) {
+  ai, onRedraft, onRegenerateApp, serverBody, sarvamVoice, onSarvamUsed, completeness, a11y, docLang, translations, onLanguage, langBusy }) {
   const [listenLang, setListenLang] = useState(lang);
   const [status, setStatus] = useState(""), [busy, setBusy] = useState("");
   const stop = useRef(null);
@@ -117,21 +80,14 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
     } catch (e) { setBusy(""); setStatus(e.message); }
   };
   const docLabel = langs.find(([c]) => c === docLang)?.[1] || "English";
-  // One switch for both: the BRD gets Sarvam translations under each English line, and the app is rebuilt in that language.
+  // One switch for both: the BRD gets Sarvam translations under each English line, and the app switches language.
+  // Translations and apps are cached per language, and the session language is prepared in the background.
   const switchLanguage = async () => {
-    if (listenLang === "english") { onLanguage("english", null); setStatus("BRD and app switched back to English."); return; }
-    setBusy("translate"); setStatus("");
-    const texts = [...new Set([...Object.values(brd.sections || {}).flat().map(i => i.text), ...brd.business_rules.map(r => r.rule), ...(brd.open_questions || [])])];
+    setStatus("");
     try {
-      const map = {};
-      for (let i = 0; i < texts.length; i += 40) {
-        const batch = texts.slice(i, i + 40);
-        const { translations: out } = await api.translate({ texts: batch, target: listenLang });
-        batch.forEach((t, j) => { map[t] = out[j]; });
-      }
-      onLanguage(listenLang, map); onSarvamUsed({ translate: true });
-      setStatus(`BRD shown in ${listenLabel} (${texts.length} lines, Sarvam Translate; English stays the reference). The app is being rebuilt in ${listenLabel}.`);
-    } catch (e) { setStatus(e.message); } finally { setBusy(""); }
+      const lines = await onLanguage(listenLang);
+      setStatus(listenLang === "english" ? "BRD and app switched back to English." : `BRD shown in ${listenLabel} (${lines} lines, Sarvam Translate; English stays the reference).`);
+    } catch (e) { setStatus(e.message); }
   };
   const word = async () => {
     setBusy("docx"); setStatus("");
@@ -142,8 +98,6 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
     <header className="brd-header"><div><div className="eyebrow">Business Requirements Document + generated web app</div><h1>{brd.project_name}</h1>
       <p>{brd.business_rules.length} approved requirements · BRD completeness {completeness ?? "n/a"}%{brd.ai_brain ? " · drafted by " + brd.ai_brain : ""}</p></div>
       <button className="btn btn-ghost" onClick={reset}>Start over</button></header>
-
-    <VendorPack brd={brd} translations={translations} evidence={evidence} />
 
     <section className="download-bar card" aria-label="Download BRD">
       <div><h2>⬇ Download BRD</h2><p className="source-note">{docLang === "english" ? "English." : `English with the ${docLabel} translation under each line (PDF, Word, Markdown).`} Jira CSV is always English, for the vendor.</p></div>
@@ -165,8 +119,8 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
 
     <div className="listen-bar card">
       <label>Language<select value={listenLang} onChange={e => setListenLang(e.target.value)}>{langs.map(([c, label]) => <option key={c} value={c}>{label}</option>)}</select></label>
-      <button className="btn btn-primary" disabled={(!sarvamVoice && listenLang !== "english") || listenLang === docLang || busy === "translate" || !!ai.busy} onClick={switchLanguage}>
-        🌐 {busy === "translate" ? "Translating…" : listenLang === docLang ? `BRD + app in ${docLabel}` : `Switch BRD + app to ${listenLabel}`}</button>
+      <button className="btn btn-primary" disabled={(!sarvamVoice && listenLang !== "english") || listenLang === docLang || langBusy} onClick={switchLanguage}>
+        🌐 {langBusy ? "Translating…" : listenLang === docLang ? `BRD + app in ${docLabel}` : `Switch BRD + app to ${listenLabel}`}</button>
       {a11y !== "deaf" && <button className="btn btn-ghost" disabled={!sarvamVoice || busy === "listen"} onClick={listen}>🔊 {busy === "listen" ? "Playing…" : "Listen to BRD summary"}</button>}
       {busy === "listen" && <button className="btn btn-ghost" onClick={() => { stop.current?.(); setBusy(""); }}>Stop</button>}
       {!sarvamVoice && <span className="source-note">Sarvam is not configured, so voice and translation are unavailable.</span>}
@@ -181,7 +135,7 @@ export default function BrdView({ brd, appHtml, appLabel, appNote, evidence, lan
         {appNote && <p className="notice">{appNote}</p>}
         <button className="btn-link" disabled={!!ai.busy} onClick={onRegenerateApp}>↻ Regenerate app</button>
         <PhoneFrame screens={[]} appHtml={appHtml} appLabel={appLabel} evidence={evidence} widgets={widgets} onWidgets={onWidgets} metadata={{ ...metadata, mode: brd.mode }} shareUrl={shareUrl} previewOnly={true} targetDevice={targetDevice} />
-        {share && cloneElement(share, { title: brd.project_name })}
+        {share}
       </aside>
     </div>
   </div>;

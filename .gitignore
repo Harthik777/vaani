@@ -3,6 +3,9 @@ node_modules/
 __pycache__/
 *.pyc
 .env
+*.env
+**/.env
+backend/.env
 dist/
 .DS_Store
 backend/data/
@@ -11,3 +14,4 @@ playwright-report/
 
 backend/benchmark.json
 frontend/test-results/
+frontend/test-output/
