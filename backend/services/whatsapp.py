@@ -57,6 +57,11 @@ async def send(to: str, body: str, media_url: str | None = None) -> dict:
         r = await client.post(f"{TWILIO_BASE}/{config.TWILIO_ACCOUNT_SID}/Messages.json", data=data)
         if r.status_code >= 400:
             detail = r.json().get("message", r.text[:200]) if r.headers.get("content-type", "").startswith("application/json") else r.text[:200]
+            if "ContentSid" in str(detail):
+                detail = ("Twilio trial accounts can only send free-form WhatsApp text inside a 24-hour session. Ask the owner to message the "
+                          "number first (join code, then any message); the reply then goes through. Outside a session a Content Template is required.")
+            elif "disallowed parameters" in str(detail):
+                detail = "Twilio trial accounts cannot attach media. Sent text only on retry; upgrade the account to attach the voice note."
             raise RuntimeError(f"Twilio {r.status_code}: {detail}")
         out = r.json()
         return {"sid": out.get("sid"), "status": out.get("status"), "to": data["To"], "media": bool(data.get("MediaUrl"))}

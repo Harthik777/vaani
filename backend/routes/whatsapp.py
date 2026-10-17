@@ -59,7 +59,14 @@ async def send(body: SendIn):
     try:
         result = await whatsapp.send(to, text, media_url)
     except Exception as exc:
-        raise HTTPException(502, f"WhatsApp send failed: {exc}") from exc
+        if media_url and "cannot attach media" in str(exc):  # trial account: retry as text only
+            try:
+                result = await whatsapp.send(to, text, None)
+                audio_note = "Twilio trial accounts cannot attach media, so the voice note was left out."
+            except Exception as exc2:
+                raise HTTPException(502, f"WhatsApp send failed: {exc2}") from exc2
+        else:
+            raise HTTPException(502, f"WhatsApp send failed: {exc}") from exc
     return {**result, "text": text, "audio_note": audio_note}
 
 
